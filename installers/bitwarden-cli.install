@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# http://redsymbol.net/articles/unofficial-bash-strict-mode/
-source "./essentials"
+source "$(dirname "$(readlink -e -- "$0")")/core.source"
 
 sudo snap install bw
