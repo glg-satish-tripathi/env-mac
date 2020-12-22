@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# http://redsymbol.net/articles/unofficial-bash-strict-mode/
+source "./essentials"
+
+sudo snap install bw
