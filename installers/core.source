@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-PARENT_SCRIPT="$(readlink -e -- "${0}")"
-PARENT_SCRIPT_BASE="$(basename "${PARENT_SCRIPT}")"
+SCRIPT="$(readlink -e -- "${0}")"
+SCRIPT_BASE="$(basename "${SCRIPT}")"
 
-if [[ "${PARENT_SCRIPT_BASE}" == 'essentials' && -z "${1}" ]]; then
-  echo "cannot call essentials directly"
+if [[ "${SCRIPT_BASE}" == 'core.source' && -z "${1}" ]]; then
+  echo "cannot call core.source directly"
   exit 1
 fi
 
@@ -19,22 +19,21 @@ set -o pipefail
 IFS=$'\n\t'
 
 PID=$$
-WORKDIR="/tmp/${PARENT_SCRIPT_BASE}"
-LOG="/tmp/${PARENT_SCRIPT_BASE}.log"
+WORKDIR="/tmp/${SCRIPT_BASE}"
+LOG="/tmp/${SCRIPT_BASE}.log"
 
 [[ -d "${WORKDIR}" ]] && rm -rf "${WORKDIR}"
 
 # log stdout/stderr to a file and stdout
-exec &> >(tee -a "${LOG}")
+exec &> >(tee "${LOG}")
 
 function cleanup {
-  echo "${PARENT_SCRIPT_BASE} exit ${PID}"
-  #set -x
-  popd
+  echo "${SCRIPT_BASE} exit ${PID}"
+  popd > /dev/null
   #[[ -d "${WORKDIR}" ]] && rm -rf "${WORKDIR}"
 }
 export -f cleanup
 trap cleanup EXIT
 
 mkdir -p "${WORKDIR}"
-pushd "${WORKDIR}"
+pushd "${WORKDIR}" > /dev/null
