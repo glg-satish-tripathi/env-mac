@@ -23,6 +23,9 @@ LOG="/tmp/bootstrap.bash.log"
 # log stdout/stderr to a file and stdout
 exec &> >(tee "${LOG}")
 
+apt-get install --assume-yes \
+  unzip
+
 for SCRIPT in installers/*.install; do
   "${SCRIPT}"
 done
