@@ -13,8 +13,8 @@ if [[ "${SCRIPT_DIR}" != "$(pwd)" ]]; then
   exit 1
 fi
 
-if [[ "$(id -u)" -ne "0" ]]; then
-  echo "please run with sudo";
+if [[ "$(id -u)" -eq "0" ]]; then
+  echo "please DO NOT run as root";
   exit 1
 fi
 
@@ -34,8 +34,8 @@ LOG="/tmp/bootstrap.bash.log"
 # log stdout/stderr to a file and stdout
 exec &> >(tee "${LOG}")
 
-apt update
-apt-get --assume-yes install \
+sudo apt update
+sudo apt-get --assume-yes install \
   unzip \
   jq
 

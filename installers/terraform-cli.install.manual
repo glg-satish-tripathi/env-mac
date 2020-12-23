@@ -8,5 +8,5 @@ wget \
   --quiet \
   "https://releases.hashicorp.com/terraform/${VERSION}/terraform_${VERSION}_linux_amd64.zip"
 unzip terraform_*.zip
-mv "terraform" "${TARGET}"
-ln --symbolic --force "${TARGET}" "/usr/local/bin/tf"
+sudo mv "terraform" "${TARGET}"
+sudo ln --symbolic --force "${TARGET}" "/usr/local/bin/tf"
