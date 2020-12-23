@@ -34,10 +34,11 @@ LOG="/tmp/bootstrap.bash.log"
 # log stdout/stderr to a file and stdout
 exec &> >(tee "${LOG}")
 
-sudo apt update
+sudo apt-get --assume-yes update
 sudo apt-get --assume-yes install \
   unzip \
-  jq
+  jq \
+  bat
 
 for SCRIPT in installers/*.install; do
   "${SCRIPT}"
@@ -46,13 +47,12 @@ done
 rsync \
   --archive \
   --verbose \
-  ./home/* \
+  "./home/" \
   "${HOME}"
 
 for FILE in bashrc/*.bash; do
-  if grep -e "$(head -n1 "${FILE}")" "${HOME}/.bashrc"; then
-    echo "FOUND"
-  else
-    echo "NOTFOUND"
+  # Append sections to .bashrc if they have never been added
+  if ! grep -e "$(head -n1 "${FILE}")" "${HOME}/.bashrc" > /dev/null; then
+    cat "${FILE}" >> "${HOME}/.bashrc"
   fi
 done
