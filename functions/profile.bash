@@ -40,9 +40,10 @@ profile () {
 	fi
 
 	if ! bw login --check &> /dev/null; then
-		BW_SESSION="$(bw login --raw)" && bw sync
+		BW_SESSION="$(bw login --raw)"
 	else
-		BW_SESSION="$(bw unlock --raw)" && bw sync
+		BW_SESSION="$(bw unlock --raw)"
 	fi
 	export BW_SESSION
+	bw sync
 }

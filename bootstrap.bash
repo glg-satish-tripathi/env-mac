@@ -18,21 +18,41 @@ if [[ "$(id -u)" -ne "0" ]]; then
   exit 1
 fi
 
-LOG="/tmp/bootstrap.bash.log"
-
-# log stdout/stderr to a file and stdout
-exec &> >(tee "${LOG}")
-
-apt-get install --assume-yes \
-  unzip
-
-for SCRIPT in installers/*.install; do
-  "${SCRIPT}"
-done
-
 function cleanup {
   ls /tmp/*.log
   :
 }
 trap cleanup EXIT
 
+#cp hidden files
+#shopt -s dotglob nullglob
+#files=(*)
+#echo "There are ${#files[@]} files here, including dot files and subdirs"
+
+LOG="/tmp/bootstrap.bash.log"
+
+# log stdout/stderr to a file and stdout
+exec &> >(tee "${LOG}")
+
+apt update
+apt-get --assume-yes install \
+  unzip \
+  jq
+
+for SCRIPT in installers/*.install; do
+  "${SCRIPT}"
+done
+
+rsync \
+  --archive \
+  --verbose \
+  ./home/* \
+  "${HOME}"
+
+for FILE in bashrc/*.bash; do
+  if grep -e "$(head -n1 "${FILE}")" "${HOME}/.bashrc"; then
+    echo "FOUND"
+  else
+    echo "NOTFOUND"
+  fi
+done
