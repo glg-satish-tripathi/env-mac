@@ -2,7 +2,7 @@
 SCRIPT="$(readlink -e -- "${0}")"
 SCRIPT_BASE="$(basename "${SCRIPT}")"
 
-if [[ "${SCRIPT_BASE}" == 'core.source' && -z "${1}" ]]; then
+if [[ "${SCRIPT_BASE}" == 'core.source' ]]; then
   echo ":: cannot call core.source directly"
   exit 1
 fi
@@ -34,8 +34,8 @@ fi
 exec &> >(tee "${LOG}")
 
 function cleanup {
-  if [ -n "$1" ]; then
-    echo ":: ${SCRIPT_BASE}:${PID} Aborted by $1"
+  if [ -n "${1:-}" ]; then
+    echo ":: ${SCRIPT_BASE}:${PID} Aborted by ${1:-}"
   elif [ $status -ne 0 ]; then
     echo ":: ${SCRIPT_BASE}:${PID} Failure (status $status)"
   else
