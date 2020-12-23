@@ -3,12 +3,12 @@ SCRIPT="$(readlink -e -- "${0}")"
 SCRIPT_BASE="$(basename "${SCRIPT}")"
 
 if [[ "${SCRIPT_BASE}" == 'core.source' && -z "${1}" ]]; then
-  echo "cannot call core.source directly"
+  echo ":: cannot call core.source directly"
   exit 1
 fi
 
 if [[ "$(id -u)" -ne "0" ]]; then
-  echo "please run with sudo";
+  echo ":: please run with sudo";
   exit 1
 fi
 
@@ -21,6 +21,12 @@ IFS=$'\n\t'
 PID=$$
 WORKDIR="/tmp/${SCRIPT_BASE}"
 LOG="/tmp/${SCRIPT_BASE}.log"
+DONE="/tmp/${SCRIPT_BASE}.done"
+
+if [[ -f "${DONE}" ]]; then
+  echo ":: ${SCRIPT_BASE}:${PID} skip"
+  exit 0
+fi
 
 [[ -d "${WORKDIR}" ]] && rm -rf "${WORKDIR}"
 
@@ -28,12 +34,21 @@ LOG="/tmp/${SCRIPT_BASE}.log"
 exec &> >(tee "${LOG}")
 
 function cleanup {
-  echo "${SCRIPT_BASE} exit ${PID}"
+  if [ -n "$1" ]; then
+    echo ":: ${SCRIPT_BASE}:${PID} Aborted by $1"
+  elif [ $status -ne 0 ]; then
+    echo ":: ${SCRIPT_BASE}:${PID} Failure (status $status)"
+  else
+    echo ":: ${SCRIPT_BASE}:${PID} Success"
+    touch "${DONE}"
+  fi
   popd > /dev/null
-  #[[ -d "${WORKDIR}" ]] && rm -rf "${WORKDIR}"
 }
 export -f cleanup
-trap cleanup EXIT
+trap 'status=$?; cleanup; exit $status' EXIT
+trap 'trap - HUP; cleanup SIGHUP; kill -HUP $$' HUP
+trap 'trap - INT; cleanup SIGINT; kill -INT $$' INT
+trap 'trap - TERM; cleanup SIGTERM; kill -TERM $$' TERM
 
 mkdir -p "${WORKDIR}"
 pushd "${WORKDIR}" > /dev/null
