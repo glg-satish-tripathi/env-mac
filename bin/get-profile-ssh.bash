@@ -45,10 +45,13 @@ for ROW in $(echo "${DATA}"); do
 		echo ${ROW} | base64 --decode | jq -r ${1}
 	}
 
+	# extract the values from the JSON
 	PRIVATE="$(_jq '.private' | base64 --decode)"
 	PUBLIC="$(_jq '.public' | base64 --decode)"
 	KEY_FILE="${HOME}/.ssh/$(_jq '.name')"
 
+	# create the new key files
+	rm -f "${KEY_FILE}.pub" "${KEY_FILE}"
 	echo "${PUBLIC}" > "${KEY_FILE}.pub"
 	echo "${PRIVATE}" > "${KEY_FILE}"
 	chmod 400 "${KEY_FILE}.pub" "${KEY_FILE}"
