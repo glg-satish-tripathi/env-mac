@@ -14,6 +14,8 @@ if [[ "${STATUS}" -ne 0 ]]; then
 	exit 1
 fi
 
+bw sync
+
 # obtain folderid from bitwarden based on MY_PROFILE
 FOLDER_ID="$( \
 	bw get folder "profile-${MY_PROFILE}" \
@@ -42,7 +44,7 @@ DATA="$( \
 DOC
 ))"
 
-for ROW in "${DATA}"; do
+for ROW in ${DATA}; do
 	_jq() {
 		echo ${ROW} | base64 --decode | jq -r ${1}
 	}

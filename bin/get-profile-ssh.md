@@ -15,3 +15,5 @@
   - public - base 64 encoded public key
   - name - file name of the private key (eg. `id_rsa`, etc.)
   - type - should always be `ssh`
+
+> **NOTE**: use `base64 -w0` to encode
