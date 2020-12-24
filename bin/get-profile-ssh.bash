@@ -36,7 +36,7 @@ DATA="$( \
 			| select(.type == "ssh")
 		)
 		| .[]
-		| @base64'
+		| @base64
 DOC
 ))"
 
