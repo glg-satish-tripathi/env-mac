@@ -7,7 +7,8 @@ profile () {
 
 	if [[ -z "${PROFILE_NAME}" ]]; then
 		# multiple choice if no profile was provided
-		local PROFILES="$(<"${PROFILE_DB}" jq -r '.[].name')"
+		local PROFILES
+		PROFILES="$(<"${PROFILE_DB}" jq -r '.[].name')"
 
 		select PROFILE_CHOICE in $PROFILES
 		do
@@ -22,7 +23,8 @@ profile () {
 		done < /dev/tty
 	else
 		# validate the entered profile against the list
-		local PROFILE_MATCH="$( \
+		local PROFILE_MATCH
+		PROFILE_MATCH="$( \
 			<"${PROFILE_DB}" jq -r --from-file <(cat <<- DOC
 			.[]
 			| select(.name | test("^${PROFILE_NAME}$"))

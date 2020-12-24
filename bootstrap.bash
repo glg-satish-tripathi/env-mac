@@ -50,9 +50,9 @@ rsync \
   "./home/" \
   "${HOME}"
 
+local FILE_NAME
 for FILE in bashrc/*.bash; do
-  # Append sections to .bashrc if they have never been added
-  if ! grep -e "$(head -n1 "${FILE}")" "${HOME}/.bashrc" > /dev/null; then
-    cat "${FILE}" >> "${HOME}/.bashrc"
-  fi
+  FILE_NAME="$(basename "${FILE}")"
+  sed -i '/#:'"${FILE_NAME}"':[+]/,/#:'"${FILE_NAME}"':[-]/d' "${HOME}/.bashrc"
+  cat "${FILE}" >> "${HOME}/.bashrc"
 done
