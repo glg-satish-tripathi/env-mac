@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# vi: noet :
 
 # http://redsymbol.net/articles/unofficial-bash-strict-mode/
 set -o errexit
@@ -22,9 +23,17 @@ fi
 DATA="$( \
   bw list items \
   --folderid "${FOLDER_ID}" \
-  --search "ssh-key" \
-  | jq -rM 'map(.fields | from_entries | select(.type == "ssh")) | .[] | @base64' \
-  )"
+  | jq -rM --from-file <(cat <<- DOC
+    map(
+      select(.fields)
+      | .fields
+      | from_entries
+      | select(.type == "ssh")
+    )
+    | .[]
+    | @base64'
+DOC
+))"
 
 for ROW in $(echo "${DATA}"); do
   _jq() {
@@ -39,3 +48,5 @@ for ROW in $(echo "${DATA}"); do
   echo "${PRIVATE}" > "${KEY_FILE}"
   chmod 400 "${KEY_FILE}.pub" "${KEY_FILE}"
 done
+
+
