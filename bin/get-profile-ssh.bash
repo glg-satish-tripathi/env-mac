@@ -18,6 +18,11 @@ if [[ -z "${FOLDER_ID}" ]]; then
   exit 1
 fi
 
+if ! bw unlock --check > /dev/null 2>&1; then
+  >&2 echo ":: bitwarden profile is locked"
+	exit 1
+fi
+
 # 1. obtain array of ssh keys from bitwarden
 # 2. put each item as a base64 encoded string on a separate line
 DATA="$( \
