@@ -7,6 +7,13 @@ set -o nounset
 set -o pipefail
 IFS=$'\n\t'
 
+# check if the profile is unlocked
+STATUS=0; bw unlock --check > /dev/null 2>&1 || STATUS=$?
+if [[ "${STATUS}" -ne 0 ]]; then
+	>&2 echo ":: bitwarden profile is locked"
+	exit 1
+fi
+
 # obtain folderid from bitwarden based on MY_PROFILE
 FOLDER_ID="$( \
 	bw get folder "profile-${MY_PROFILE}" \
@@ -15,11 +22,6 @@ FOLDER_ID="$( \
 
 if [[ -z "${FOLDER_ID}" ]]; then
 	>&2 echo ":: unable to obtain folderid from bitwarden"
-	exit 1
-fi
-
-if ! bw unlock --check > /dev/null 2>&1; then
-	>&2 echo ":: bitwarden profile is locked"
 	exit 1
 fi
 
