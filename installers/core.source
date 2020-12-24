@@ -36,7 +36,7 @@ exec &> >(tee "${LOG}")
 function cleanup {
   if [ -n "${1:-}" ]; then
     echo ":: ${SCRIPT_BASE}:${PID} Aborted by ${1:-}"
-  elif [ $status -ne 0 ]; then
+  elif [ "${status}" -ne 0 ]; then
     echo ":: ${SCRIPT_BASE}:${PID} Failure (status $status)"
   else
     echo ":: ${SCRIPT_BASE}:${PID} Success"

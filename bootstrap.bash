@@ -55,7 +55,9 @@ for FILE in bashrc/*.bash; do
   # remove section in .bashrc ( eg. #:somefile.bash:[+-] )
   sed -i '/#:'"${FILE_NAME}"':[+]/,/#:'"${FILE_NAME}"':[-]/d' "${HOME}/.bashrc"
   # add the section back
-  echo "#:${FILE_NAME}:+" >> "${HOME}/.bashrc"
-  cat "${FILE}" >> "${HOME}/.bashrc"
-  echo "#:${FILE_NAME}:-" >> "${HOME}/.bashrc"
+  {
+    echo "#:${FILE_NAME}:+"
+    cat "${FILE}"
+    echo "#:${FILE_NAME}:-"
+  } >> "${HOME}/.bashrc"
 done
