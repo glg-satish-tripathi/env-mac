@@ -38,5 +38,3 @@ sudo -Hu ubuntu bash -c "cd && cd env-ubuntu && ./bootstrap.bash"
     # - id_rsa
     # - id_rsa.pub
     ```
-
-    

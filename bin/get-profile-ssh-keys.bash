@@ -28,7 +28,7 @@ if [[ -z "${FOLDER_ID}" ]]; then
 fi
 
 # 1. obtain array of ssh keys from bitwarden
-# 2. put each item as a base64 encoded string on a separate line
+# 2. one base64 value per item for easier looping
 DATA="$( \
 	bw list items \
 	--folderid "${FOLDER_ID}" \
@@ -48,17 +48,16 @@ DOC
 
 for ITEM in ${DATA}; do
 	_item() {
-		base64 --decode <<< "${ITEM}" | jq -rM ${1}
+		base64 --decode <<< "${ITEM}" | jq -rM "${1}"
 	}
-
-	# extract the values from the JSON
 	NAME="$(_item '.name')"
 	ITEM_ID="$(_item '.id')"
+	# one base64 value per attachment for easier looping
 	ATTACHMENTS="$(_item '.attachments' | jq -rM '.[] | @base64')"
 
 	for ATTACHMENT in ${ATTACHMENTS}; do
 		_attachment() {
-			base64 --decode <<< "${ATTACHMENT}" | jq -rM ${1}
+			base64 --decode <<< "${ATTACHMENT}" | jq -rM "${1}"
 		}
 		FILE="$(_attachment '.file')"
 		ATTACHMENT_ID="$(_attachment '.id')"
