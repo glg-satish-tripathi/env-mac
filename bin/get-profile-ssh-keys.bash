@@ -35,30 +35,41 @@ DATA="$( \
 	| jq -rM --from-file <(cat <<- DOC
 		map(
 			select(.fields)
-			| .fields
-			| from_entries
+			| (.fields | from_entries | {id: .id, name: .name, type: .type})
+				+ {id: .id}
+				+ {attachments: (.attachments // []) | map({id: .id, file: .fileName})}
 			| select(.type == "ssh")
+			| select(.attachments | length > 0)
 		)
 		| .[]
 		| @base64
 DOC
 ))"
 
-for ROW in ${DATA}; do
-	_jq() {
-		echo ${ROW} | base64 --decode | jq -r ${1}
+for ITEM in ${DATA}; do
+	_item() {
+		base64 --decode <<< "${ITEM}" | jq -rM ${1}
 	}
 
 	# extract the values from the JSON
-	PRIVATE="$(_jq '.private' | base64 --decode)"
-	PUBLIC="$(_jq '.public' | base64 --decode)"
-	KEY_FILE="${HOME}/.ssh/$(_jq '.name')"
+	NAME="$(_item '.name')"
+	ITEM_ID="$(_item '.id')"
+	ATTACHMENTS="$(_item '.attachments' | jq -rM '.[] | @base64')"
 
-	# create the new key files
-	rm -f "${KEY_FILE}.pub" "${KEY_FILE}"
-	echo "${PUBLIC}" > "${KEY_FILE}.pub"
-	echo "${PRIVATE}" > "${KEY_FILE}"
-	chmod 400 "${KEY_FILE}.pub" "${KEY_FILE}"
+	for ATTACHMENT in ${ATTACHMENTS}; do
+		_attachment() {
+			base64 --decode <<< "${ATTACHMENT}" | jq -rM ${1}
+		}
+		FILE="$(_attachment '.file')"
+		ATTACHMENT_ID="$(_attachment '.id')"
+
+		NEW_FILE="${HOME}/.ssh/${FILE}"
+		rm -f "${NEW_FILE}"
+		bw get attachment "${ATTACHMENT_ID}" \
+			--raw \
+			--itemid "${ITEM_ID}" \
+			> "${NEW_FILE}"
+		chmod 400 "${NEW_FILE}"
+		echo ":: created ${NEW_FILE}"
+	done
 done
-
-
