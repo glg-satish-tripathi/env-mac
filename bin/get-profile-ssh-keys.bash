@@ -35,8 +35,8 @@ DATA="$( \
 	| jq -rM --from-file <(cat <<- DOC
 		map(
 			select(.fields)
-			| (.fields | from_entries | {id: .id, name: .name, type: .type})
-				+ {id: .id}
+			| (.fields | from_entries | {type: .type})
+				+ {id: .id, name: .name}
 				+ {attachments: (.attachments // []) | map({id: .id, file: .fileName})}
 			| select(.type == "ssh")
 			| select(.attachments | length > 0)
@@ -70,6 +70,6 @@ for ITEM in ${DATA}; do
 			--itemid "${ITEM_ID}" \
 			> "${NEW_FILE}"
 		chmod 400 "${NEW_FILE}"
-		echo ":: created ${NEW_FILE}"
+		echo ":: created ${NEW_FILE} (${NAME})"
 	done
 done
