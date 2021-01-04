@@ -8,7 +8,7 @@ set -o nounset
 set -o pipefail
 IFS=$'\n\t'
 
-if [[ "${SCRIPT_DIR}" != "$(pwd)" ]]; then
+if [[ "${SCRIPT_DIR}" != "$(readlink -e -- "$(pwd)")" ]]; then
   echo "please execute this script from its own directory"
   exit 1
 fi
