@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
+
+# full path to parent script
 SCRIPT="$(readlink -e -- "${0}")"
+# parent script file name
 SCRIPT_BASE="$(basename "${SCRIPT}")"
 
+# full path to this file
 SOURCE_FILE="$(readlink -e -- "${BASH_SOURCE[${#BASH_SOURCE[@]} - 1]}")"
+# directory of this file
 SOURCE_DIR="$(dirname "${SOURCE_FILE}")"
 
 if [[ "${SCRIPT_BASE}" == 'core.source' ]]; then
@@ -25,15 +30,18 @@ PID=$$
 WORKDIR="/tmp/${SCRIPT_BASE}"
 LOG="/tmp/${SCRIPT_BASE}.log"
 
+# directory that keeps track of successful installs
 CACHE_DIR="${SOURCE_DIR}/cache"
 mkdir -p "${CACHE_DIR}"
 DONE="${CACHE_DIR}/${SCRIPT_BASE}.done"
 
+# if app was successfully installed it is skipped on re-runs
 if [[ -f "${DONE}" ]]; then
   echo ":: ${SCRIPT_BASE}:${PID} skip"
   exit 0
 fi
 
+# if we are re-running, delete the previous install working dir
 [[ -d "${WORKDIR}" ]] && rm -rf "${WORKDIR}"
 
 # log stdout/stderr to a file and stdout
