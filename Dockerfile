@@ -9,7 +9,9 @@ RUN apt-get --yes update
 RUN apt-get --yes install \
   git \
   sudo \
-  curl
+  curl \
+  vim \
+  rsync
 
 # we don't want to run as root the rest of the time
 RUN useradd -ms /bin/bash ubuntu
@@ -23,6 +25,6 @@ WORKDIR /home/ubuntu
 
 RUN git clone 'https://github.com/datfinesoul/env-ubuntu.git' \
   '/home/ubuntu/env-ubuntu'
-#RUN cd env-ubuntu && ./bootstrap.bash
+RUN cd env-ubuntu && ./bootstrap.bash
 
 CMD ["sleep", "infinity"]

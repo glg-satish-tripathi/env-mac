@@ -1,4 +1,6 @@
-run: build
+main: build run
+
+run:
 	docker run \
 		--interactive \
 		--tty \

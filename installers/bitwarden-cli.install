@@ -2,6 +2,9 @@
 # shellcheck disable=SC1090
 source "$(dirname "$(readlink -e -- "$0")")/core.source"
 
+# Setting up snap (snap.d) inside a docker container is to hard,
+# so this script includes the nodejs install as well, which
+# is recommended anyways on bitwarden/cli
 if which snap > /dev/null; then
   sudo snap install bw
 elif which node > /dev/null; then
