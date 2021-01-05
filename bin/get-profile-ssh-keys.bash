@@ -46,6 +46,9 @@ DATA="$( \
 DOC
 ))"
 
+mkdir -p "${HOME}/.ssh"
+chmod 700 "${HOME}/.ssh"
+
 for ITEM in ${DATA}; do
 	_item() {
 		base64 --decode <<< "${ITEM}" | jq -rM "${1}"
