@@ -1,30 +1,39 @@
 FROM ubuntu:20.04
 
 # needed for add-apt-repository
-RUN apt-get --yes update
-RUN apt-get --yes install software-properties-common
+RUN apt-get --yes update \
+&& apt-get --yes install software-properties-common \
+&& rm -rf /var/lib/apt/lists/*
 
-RUN add-apt-repository --yes ppa:git-core/ppa
-RUN apt-get --yes update
-RUN apt-get --yes install \
-  git \
-  sudo \
-  curl \
-  vim \
-  rsync
+# packages that are required or just helpful for a dev env
+RUN add-apt-repository --yes ppa:git-core/ppa \
+&& apt-get --yes update \
+&& apt-get --yes install \
+git \
+sudo \
+curl \
+vim \
+rsync \
+&& rm -rf /var/lib/apt/lists/*
 
-# we don't want to run as root the rest of the time
+# install node, since some apps down the road will depend on it
+RUN curl -sL https://deb.nodesource.com/setup_14.x \
+| bash - \
+&& apt-get install -y nodejs
+
+# add ubuntu user, whic his pretty standard on most setups
 RUN useradd -ms /bin/bash ubuntu
+# allow ubuntu to sudo w/o password for everything
 RUN echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-RUN curl -sL https://deb.nodesource.com/setup_14.x | sudo -E bash -
-RUN apt-get install -y nodejs
-
+# we don't want to run as root the rest of the time
 USER ubuntu
 WORKDIR /home/ubuntu
 
+# install the actual dev environement
 RUN git clone 'https://github.com/datfinesoul/env-ubuntu.git' \
-  '/home/ubuntu/env-ubuntu'
-RUN cd env-ubuntu && ./bootstrap.bash
+'/home/ubuntu/env-ubuntu' \
+&& cd env-ubuntu && ./bootstrap.bash
 
+# this keeps the container around if used with docker-compose
 CMD ["sleep", "infinity"]
