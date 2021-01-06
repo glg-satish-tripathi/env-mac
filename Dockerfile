@@ -17,8 +17,8 @@ rsync \
 && rm -rf /var/lib/apt/lists/*
 
 # install node, since some apps down the road will depend on it
-RUN curl -sL https://deb.nodesource.com/setup_14.x \
-| bash - \
+RUN set -o pipefail \
+&& curl -sL https://deb.nodesource.com/setup_14.x | bash - \
 && apt-get install -y nodejs
 
 # add ubuntu user, whic his pretty standard on most setups
