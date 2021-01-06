@@ -10,3 +10,6 @@ run:
 
 build:
 	docker build -t env-ubuntu:latest .
+
+rebuild:
+	docker build --no-cache -t env-ubuntu:latest .
