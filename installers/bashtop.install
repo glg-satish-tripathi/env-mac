@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC1090
+source "$(dirname "$(readlink -e -- "$0")")/core.source"
+
+sudo add-apt-repository --yes ppa:bashtop-monitor/bashtop
+sudo apt-get --yes update
+sudo apt-get --yes install bashtop

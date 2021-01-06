@@ -38,3 +38,13 @@ sudo -Hu ubuntu bash -c "cd && cd env-ubuntu && ./bootstrap.bash"
     # - id_rsa
     # - id_rsa.pub
     ```
+
+## Notes
+
+- For some reason apt commands can sometimes just get stuck.  Here are some workarounds.
+  - ipv4 preference
+    - `sudo vim /etc/gai.conf`
+    - uncomment the `# precedence ::ffff:0:0/96  100` line
+  - local mirror issue
+    - `sudo vim /etc/apt/sources.list`
+    - change all the `jp.archive...` references to `archive...`

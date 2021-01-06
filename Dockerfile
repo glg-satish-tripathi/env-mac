@@ -1,5 +1,7 @@
 FROM ubuntu:20.04
 
+SHELL ["/bin/bash", "-c"]
+
 # needed for add-apt-repository
 RUN apt-get --yes update \
 && apt-get --yes install software-properties-common \
