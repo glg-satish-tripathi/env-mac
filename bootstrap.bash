@@ -44,12 +44,18 @@ for SCRIPT in installers/*.install; do
   "${SCRIPT}"
 done
 
+# this needs to be cleared to make sure old files are not included in later
+# package installations
+rm -rf "${HOME}/.vim"
+
+# copy files and dirs to the home folder (additive)
 rsync \
   --archive \
   --verbose \
   "./home/" \
   "${HOME}"
 
+# vim specific stuff
 pushd "${HOME}/.vim/bundle/coc.nvim"
 npm install
 popd
