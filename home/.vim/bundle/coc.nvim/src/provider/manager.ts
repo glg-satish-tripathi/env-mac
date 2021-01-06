@@ -1,12 +1,14 @@
-import { Definition, DocumentSelector, Location, TextDocument } from 'vscode-languageserver-protocol'
+import { Definition, DocumentSelector, Location, LocationLink } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import workspace from '../workspace'
+import window from '../window'
 const logger = require('../util/logger')('provider-manager')
 
 export interface ProviderItem<T> {
-  id: string,
+  id: string
   selector: DocumentSelector
   provider: T
-  [index: string]: any
+  [key: string]: any
 }
 
 export default class Manager<T> {
@@ -40,15 +42,11 @@ export default class Manager<T> {
 
   protected getProviders(document: TextDocument): ProviderItem<T>[] {
     let items = Array.from(this.providers)
-    items = items.filter(item => {
-      return workspace.match(item.selector, document) > 0
-    })
-    return items.sort((a, b) => {
-      return workspace.match(b.selector, document) - workspace.match(a.selector, document)
-    })
+    items = items.filter(item => workspace.match(item.selector, document) > 0)
+    return items.sort((a, b) => workspace.match(b.selector, document) - workspace.match(a.selector, document))
   }
 
-  protected mergeDefinitions(arr: Definition[]): Location[] {
+  protected mergeDefinitions(arr: (Definition | LocationLink[])[]): Location[] {
     let res: Location[] = []
     for (let def of arr) {
       if (!def) continue
@@ -60,14 +58,22 @@ export default class Manager<T> {
         }
       } else if (Array.isArray(def)) {
         for (let d of def) {
-          let { uri, range } = d
-          let idx = res.findIndex(l => l.uri == uri && l.range.start.line == range.start.line)
-          if (idx == -1) {
-            res.push(d)
+          if (Location.is(d)) {
+            let { uri, range } = d
+            let idx = res.findIndex(l => l.uri == uri && l.range.start.line == range.start.line)
+            if (idx == -1) {
+              res.push(d)
+            }
+          } else if (LocationLink.is(d)) {
+            let { targetUri, targetSelectionRange } = d
+            let idx = res.findIndex(l => l.uri === targetUri && l.range.start.line === targetSelectionRange.start.line)
+            if (idx === -1) {
+              res.push(Location.create(targetUri, targetSelectionRange))
+            }
           }
         }
       } else {
-        workspace.showMessage(`Bad definition ${JSON.stringify(def)}`, 'error')
+        window.showMessage(`Bad definition ${JSON.stringify(def)}`, 'error')
       }
     }
     return res

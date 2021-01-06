@@ -1,7 +1,7 @@
-import { Neovim, Window } from '@chemzqm/neovim'
-import { RequestOptions } from 'http'
+import { Neovim, Window, Buffer } from '@chemzqm/neovim'
 import log4js from 'log4js'
-import { CancellationToken, CompletionTriggerKind, CreateFileOptions, DeleteFileOptions, Diagnostic, Disposable, DocumentSelector, Event, FormattingOptions, Location, Position, Range, RenameFileOptions, TextDocument, TextDocumentSaveReason, TextEdit, WorkspaceEdit, WorkspaceFolder } from 'vscode-languageserver-protocol'
+import { CancellationToken, CompletionTriggerKind, CreateFile, CreateFileOptions, DeleteFile, DeleteFileOptions, Diagnostic, Disposable, DocumentSelector, Event, FormattingOptions, Location, Position, Range, RenameFile, RenameFileOptions, SymbolKind, TextDocumentEdit, TextDocumentSaveReason, TextEdit, WorkspaceEdit, WorkspaceFolder } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { URI } from 'vscode-uri'
 import Configurations from './configuration'
 import { LanguageClient } from './language-client'
@@ -13,14 +13,275 @@ import * as protocol from 'vscode-languageserver-protocol'
 export type MsgTypes = 'error' | 'warning' | 'more'
 export type ExtensionState = 'disabled' | 'loaded' | 'activated' | 'unknown'
 
+export type ProviderName = 'rename' | 'onTypeEdit' | 'documentLink' | 'documentColor'
+  | 'foldingRange' | 'format' | 'codeAction' | 'workspaceSymbols' | 'formatRange'
+  | 'hover' | 'signature' | 'documentSymbol' | 'documentHighlight' | 'definition'
+  | 'declaration' | 'typeDefinition' | 'reference' | 'implementation'
+  | 'codeLens' | 'selectionRange'
+
+export interface ParsedUrlQueryInput {
+  [key: string]: unknown
+}
+
+export interface BufferSyncItem {
+  /**
+   * Called on buffer unload.
+   */
+  dispose: () => void
+  /**
+   * Called on buffer change.
+   */
+  onChange?(e: DidChangeTextDocumentParams): void
+}
+
+export interface DiagnosticConfig {
+  enableSign: boolean
+  locationlistUpdate: boolean
+  enableHighlightLineNumber: boolean
+  checkCurrentLine: boolean
+  enableMessage: string
+  displayByAle: boolean
+  signPriority: number
+  errorSign: string
+  warningSign: string
+  infoSign: string
+  hintSign: string
+  level: number
+  messageTarget: string
+  messageDelay: number
+  maxWindowHeight: number
+  maxWindowWidth: number
+  refreshOnInsertMode: boolean
+  virtualText: boolean
+  virtualTextCurrentLineOnly: boolean
+  virtualTextSrcId: number
+  virtualTextPrefix: string
+  virtualTextLines: number
+  virtualTextLineSeparator: string
+  filetypeMap: object
+  showUnused?: boolean
+  showDeprecated?: boolean
+  format?: string
+}
+
+export interface DiagnosticEventParams {
+  bufnr: number
+  uri: string
+  diagnostics: ReadonlyArray<Diagnostic>
+}
+
+/**
+ * Value-object describing where and how progress should show.
+ */
+export interface ProgressOptions {
+
+  /**
+   * A human-readable string which will be used to describe the
+   * operation.
+   */
+  title?: string
+
+  /**
+   * Controls if a cancel button should show to allow the user to
+   * cancel the long running operation.
+   */
+  cancellable?: boolean
+}
+
+/**
+ * Defines a generalized way of reporting progress updates.
+ */
+export interface Progress<T> {
+
+  /**
+   * Report a progress update.
+   *
+   * @param value A progress item, like a message and/or an
+   * report on how much work finished
+   */
+  report(value: T): void
+}
+
+/**
+ * Represents an action that is shown with an information, warning, or
+ * error message.
+ *
+ * @see [showInformationMessage](#window.showInformationMessage)
+ * @see [showWarningMessage](#window.showWarningMessage)
+ * @see [showErrorMessage](#window.showErrorMessage)
+ */
+export interface MessageItem {
+
+  /**
+   * A short title like 'Retry', 'Open Log' etc.
+   */
+  title: string
+
+  /**
+   * A hint for modal dialogs that the item should be triggered
+   * when the user cancels the dialog (e.g. by pressing the ESC
+   * key).
+   *
+   * Note: this option is ignored for non-modal messages.
+   * Note: not used by coc.nvim for now.
+   */
+  isCloseAffordance?: boolean
+}
+
+export interface DialogButton {
+  /**
+   * Use by callback, should >= 0
+   */
+  index: number
+  text: string
+  /**
+   * Not shown when true
+   */
+  disabled?: boolean
+}
+
+export interface DialogPreferences {
+  maxWidth?: number
+  maxHeight?: number
+  floatHighlight?: string
+  floatBorderHighlight?: string
+  pickerButtons?: boolean
+  pickerButtonShortcut?: boolean
+  confirmKey?: string
+}
+
+export interface NotificationPreferences {
+  top: number
+  right: number
+  maxWidth: number
+  maxHeight: number
+  highlight: string
+  minProgressWidth: number
+}
+
+export interface DialogConfig {
+  content: string
+  /**
+   * Optional title text.
+   */
+  title?: string
+  /**
+   * show close button, default to true when not specified.
+   */
+  close?: boolean
+  /**
+   * highlight group for dialog window, default to `"dialog.floatHighlight"` or 'CocFlating'
+   */
+  highlight?: string
+  /**
+   * highlight groups for border, default to `"dialog.borderhighlight"` or 'CocFlating'
+   */
+  borderhighlight?: string
+  /**
+   * Buttons as bottom of dialog.
+   */
+  buttons?: DialogButton[]
+  /**
+   * index is -1 for window close without button click
+   */
+  callback?: (index: number) => void
+}
+
+export interface NotificationConfig {
+  content: string
+  /**
+   * Optional title text.
+   */
+  title?: string
+  /**
+   * Timeout in miliseconds to dismiss notification.
+   */
+  timeout?: number
+  /**
+   * show close button, default to true when not specified.
+   */
+  close?: boolean
+  /**
+   * highlight groups for border, default to `"dialog.borderhighlight"` or 'CocFlating'
+   */
+  borderhighlight?: string
+  /**
+   * Buttons as bottom of dialog.
+   */
+  buttons?: DialogButton[]
+  /**
+   * index is -1 for window close without button click
+   */
+  callback?: (index: number) => void
+}
+
+/**
+ * Represents an item that can be selected from
+ * a list of items.
+ */
+export interface QuickPickItem {
+
+  /**
+   * A human-readable string which is rendered prominent
+   */
+  label: string
+
+  /**
+   * A human-readable string which is rendered less prominent in the same line
+   */
+  description?: string
+
+  /**
+   * Optional flag indicating if this item is picked initially.
+   */
+  picked?: boolean
+}
+
+export type DocumentChange = TextDocumentEdit | CreateFile | RenameFile | DeleteFile
+
 export interface CodeAction extends protocol.CodeAction {
-  isPrefered?: boolean
   clientId?: string
 }
 
-export interface DidChangeTextDocumentParams extends protocol.DidChangeTextDocumentParams {
+/**
+ * An event describing a change to a text document.
+ */
+export interface TextDocumentContentChange {
+  /**
+   * The range of the document that changed.
+   */
+  range: Range
+  /**
+   * The new text for the provided range.
+   */
+  text: string
+}
+
+export interface DidChangeTextDocumentParams {
+  /**
+   * The document that did change. The version number points
+   * to the version after all provided content changes have
+   * been applied.
+   */
+  textDocument: {
+    version: number
+    uri: string
+  }
+  /**
+   * The actual content changes. The content changes describe single state changes
+   * to the document. So if there are two content changes c1 (at array index 0) and
+   * c2 (at array index 1) for a document in state S then c1 moves the document from
+   * S to S' and c2 from S' to S''. So c1 is computed on the state S and c2 is computed
+   * on the state S'.
+   */
+  contentChanges: TextDocumentContentChange[]
+  /**
+   * Buffer number of document.
+   */
   bufnr: number
-  // original text
+  /**
+   * Original content before change
+   */
   original: string
 }
 
@@ -29,6 +290,7 @@ export interface TaskOptions {
   args?: string[]
   cwd?: string
   pty?: boolean
+  env?: { [key: string]: string }
   detach?: boolean
 }
 
@@ -39,18 +301,47 @@ export interface Documentation {
 }
 
 export interface KeymapOption {
+  /**
+   * Use request instead of notify, default true
+   */
   sync: boolean
+  /**
+   * Cancel completion before invoke callback, default true
+   */
   cancel: boolean
+  /**
+   * Use <silent> for keymap, default false
+   */
   silent: boolean
+  /**
+   * Enable repeat support for repeat.vim, default false
+   */
   repeat: boolean
 }
 
+export interface TagDefinition {
+  name: string
+  cmd: string
+  filename: string
+}
+
 export interface Autocmd {
+  pattern?: string
   event: string | string[]
   arglist?: string[]
   request?: boolean
   thisArg?: any
   callback: Function
+}
+
+export interface ExtensionJson {
+  name: string
+  main?: string
+  engines: {
+    [key: string]: string
+  }
+  version?: string
+  [key: string]: any
 }
 
 export interface ExtensionInfo {
@@ -62,6 +353,7 @@ export interface ExtensionInfo {
   uri?: string
   state: ExtensionState
   isLocal: boolean
+  packageJSON: Readonly<ExtensionJson>
 }
 
 export interface ErrorItem {
@@ -230,10 +522,13 @@ export interface Terminal {
 export interface Env {
   completeOpt: string
   runtimepath: string
+  disabledSources: { [filetype: string]: string[] }
+  readonly guicursor: string
   readonly mode: string
+  readonly apiversion: number
   readonly floating: boolean
+  readonly sign: boolean
   readonly extensionRoot: string
-  readonly watchExtensions: string[]
   readonly globalExtensions: string[]
   readonly workspaceFolders: string[]
   readonly config: any
@@ -246,16 +541,19 @@ export interface Env {
   readonly isVim: boolean
   readonly isCygwin: boolean
   readonly isMacvim: boolean
+  readonly isiTerm: boolean
   readonly version: string
   readonly locationlist: boolean
   readonly progpath: string
+  readonly dialog: boolean
   readonly textprop: boolean
+  readonly vimCommands: CommandConfig[]
 }
 
-export interface Fragment {
-  start: number
-  lines: string[]
-  filetype: string
+export interface CommandConfig {
+  id: string
+  cmd: string
+  title?: string
 }
 
 export interface EditerState {
@@ -280,14 +578,19 @@ export interface SnippetManager {
   previousPlaceholder(): Promise<void>
 }
 
-export type ModuleResolve = () => Promise<string>
-
 export type MapMode = 'n' | 'i' | 'v' | 'x' | 's' | 'o'
 
 export enum PatternType {
   Buffer,
   LanguageServer,
   Global,
+}
+
+export enum ExtensionType {
+  Global,
+  Local,
+  SingleFile,
+  Internal
 }
 
 export enum SourceType {
@@ -324,20 +627,22 @@ export interface ConfigurationChangeEvent {
 }
 
 export interface LanguageServerConfig {
-  module?: string | ModuleResolve
+  module?: string
   command?: string
   transport?: string
   transportPort?: number
   disableWorkspaceFolders?: boolean
+  disableSnippetCompletion?: boolean
   disableDynamicRegister?: boolean
   disableCompletion?: boolean
   disableDiagnostics?: boolean
+  formatterPriority?: number
   filetypes: string[]
   additionalSchemes: string[]
-  enable: boolean
+  enable?: boolean
   args?: string[]
   cwd?: string
-  env?: string[]
+  env?: any
   // socket port
   port?: number
   host?: string
@@ -347,6 +652,7 @@ export interface LanguageServerConfig {
   rootPatterns?: string[]
   ignoredRootPaths?: string[]
   initializationOptions?: any
+  progressOnInitialization?: boolean
   revealOutputChannelOn?: string
   configSection?: string
   stdioEncoding?: string
@@ -366,7 +672,7 @@ export interface QuickfixItem {
   module?: string
   range?: Range
   text?: string
-  type?: string,
+  type?: string
   filename?: string
   bufnr?: number
   lnum?: number
@@ -387,17 +693,6 @@ export interface ChangeItem {
   removed: string
 }
 
-export interface BufferOption {
-  eol: number
-  variables: { [key: string]: any }
-  bufname: string
-  fullpath: string
-  buftype: string
-  filetype: string
-  iskeyword: string
-  changedtick: number
-}
-
 export interface DiagnosticInfo {
   error: number
   warning: number
@@ -409,6 +704,8 @@ export interface DiagnosticItem {
   file: string
   lnum: number
   col: number
+  source: string
+  code: string | number
   message: string
   severity: string
   level: number
@@ -452,7 +749,20 @@ export interface CompleteOption {
   readonly synname: string
   readonly source?: string
   readonly blacklist: string[]
+  readonly changedtick: number
   triggerForInComplete?: boolean
+}
+
+export interface InsertChange {
+  lnum: number
+  col: number
+  pre: string
+  changedtick: number
+}
+
+export interface ScreenPosition {
+  row: number
+  col: number
 }
 
 export interface PumBounding {
@@ -477,6 +787,7 @@ export interface VimCompleteItem {
   // it's not saved by vim, for temporarily usage
   score?: number
   sortText?: string
+  sourceScore?: number
   filterText?: string
   isSnippet?: boolean
   source?: string
@@ -494,56 +805,8 @@ export interface VimCompleteItem {
   line?: string
 }
 
-export interface PopupProps {
-  col: number
-  length: number // or 0
-  type: string
-  end_lnum?: number
-  end_col?: number
-  id?: number
-  transparent?: boolean
-}
-
-export interface TextItem {
-  text: string
-  props?: PopupProps
-}
-
-export interface PopupOptions {
-  line?: number | string
-  col?: number | string
-  pos?: 'topleft' | 'topright' | 'botleft' | 'botright' | 'center'
-  // move float window when content overlap when it's false(default)
-  fixed?: boolean
-  // no overlap of popupmenu-completion, not implemented
-  flip?: boolean
-  maxheight?: number
-  minheight?: number
-  maxwidth?: number
-  minwidth?: number
-  // When out of range the last buffer line will at the top of the window.
-  firstline?: number
-  // not implemented
-  hidden?: boolean
-  // only -1 and 0 are supported
-  tab?: number
-  title?: string
-  wrap?: boolean
-  drag?: boolean
-  highlight?: string
-  padding?: [number, number, number, number]
-  border?: [number, number, number, number]
-  borderhighlight?: [string, string, string, string]
-  borderchars?: string[]
-  zindex?: number
-  time?: number
-  moved?: string | [number, number]
-  filter?: string
-  callback?: string
-}
-
 export interface PopupChangeEvent {
-  completed_item: VimCompleteItem,
+  completed_item: VimCompleteItem
   height: number
   width: number
   row: number
@@ -563,6 +826,7 @@ export interface CompleteResult {
 export interface SourceStat {
   name: string
   priority: number
+  triggerCharacters: string[]
   type: string
   shortcut: string
   filepath: string
@@ -577,9 +841,11 @@ export interface CompleteConfig {
   enablePreview: boolean
   enablePreselect: boolean
   labelMaxLength: number
+  floatEnable: boolean
   maxPreviewWidth: number
   autoTrigger: string
   previewIsKeyword: string
+  triggerCompletionWait: number
   minTriggerInputLength: number
   triggerAfterInsertEnter: boolean
   acceptSuggestionOnCommitCharacter: boolean
@@ -595,6 +861,7 @@ export interface CompleteConfig {
   lowPrioritySourceLimit: number
   removeDuplicateItems: boolean
   defaultSortMethod: string
+  asciiCharactersOnly: boolean
 }
 
 export interface WorkspaceConfiguration {
@@ -663,6 +930,21 @@ export interface RenameEvent {
   newUri: URI
 }
 
+export interface OpenTerminalOption {
+  /**
+   * Cwd of terminal, default to result of |getcwd()|
+   */
+  cwd?: string
+  /**
+   * Close terminal on job finish, default to true.
+   */
+  autoclose?: boolean
+  /**
+   * Keep foucus current window, default to false,
+   */
+  keepfocus?: boolean
+}
+
 export interface TerminalResult {
   bufnr: number
   success: boolean
@@ -694,12 +976,6 @@ export enum ConfigurationTarget {
   Global,
   User,
   Workspace
-}
-
-export enum DiagnosticKind {
-  Syntax,
-  Semantic,
-  Suggestion,
 }
 
 export enum ServiceStat {
@@ -735,9 +1011,13 @@ export interface LocationWithLine {
 export interface ListItem {
   label: string
   filterText?: string
+  /**
+   * A string that should be used when comparing this item
+   * with other items, only used for fuzzy filter.
+   */
+  sortText?: string
   location?: Location | LocationWithLine | string
   data?: any
-  recentScore?: number
   ansiHighlights?: AnsiHighlight[]
   resolved?: boolean
 }
@@ -748,6 +1028,10 @@ export interface ListHighlights {
   hlGroup?: string
 }
 
+export interface ListItemWithHighlights extends ListItem {
+  highlights?: ListHighlights
+}
+
 export interface AnsiHighlight {
   // column indexes, end exclusive
   span: [number, number]
@@ -756,7 +1040,7 @@ export interface AnsiHighlight {
 
 export interface ListItemsEvent {
   items: ListItem[]
-  highlights: ListHighlights[]
+  finished: boolean
   append?: boolean
   reload?: boolean
 }
@@ -775,6 +1059,8 @@ export interface ListOptions {
   matcher: Matcher
   autoPreview: boolean
   numberSelect: boolean
+  noQuit: boolean
+  first: boolean
 }
 
 export interface ListContext {
@@ -783,6 +1069,7 @@ export interface ListContext {
   cwd: string
   options: ListOptions
   window: Window
+  buffer: Buffer
   listWindow: Window
 }
 
@@ -855,16 +1142,64 @@ export interface IList {
 
 export interface PreiewOptions {
   bufname?: string
-  sketch: boolean
   filetype: string
-  lines?: string[]
+  lines: string[]
   lnum?: number
+  range?: Range
+  /**
+   * @deprecated not used
+   */
+  sketch?: boolean
 }
 
-export interface DownloadOptions extends RequestOptions {
-  // absolute folder path
+export interface FetchOptions {
+  /**
+   * Default to 'GET'
+   */
+  method?: string
+  /**
+   * Default no timeout
+   */
+  timeout?: number
+  /**
+   * Always return buffer instead of parsed response.
+   */
+  buffer?: boolean
+  /**
+   * - 'string' for text response content
+   * - 'object' for json response content
+   * - 'buffer' for response not text or json
+   */
+  data?: string | { [key: string]: any } | Buffer
+  /**
+   * Plain object added as query of url
+   */
+  query?: ParsedUrlQueryInput
+  headers?: any
+  /**
+   * User for http basic auth, should use with password
+   */
+  user?: string
+  /**
+   * Password for http basic auth, should use with user
+   */
+  password?: string
+}
+
+export interface DownloadOptions extends FetchOptions {
+  /**
+   * Folder that contains downloaded file or extracted files by untar or unzip
+   */
   dest: string
-  onProgress?: (percent: number) => void
+  /**
+   * Remove the specified number of leading path elements for *untar* only, default to `1`.
+   */
+  strip?: number
+  /**
+   * If true, use untar for `.tar.gz` filename
+   */
+  extract?: boolean | 'untar' | 'unzip'
+  onProgress?: (percent: string) => void
 }
 
 export interface AnsiItem {
@@ -883,13 +1218,13 @@ export interface ISource {
   shortcut?: string
   priority?: number
   sourceType?: SourceType
+  optionalFns?: string[]
   triggerCharacters?: string[]
   // should only be used when trigger match.
   triggerOnly?: boolean
   // regex to detect trigger completetion, ignored when triggerCharacters exists.
   triggerPatterns?: RegExp[]
   disableSyntaxes?: string[]
-  duplicate?: boolean
   isSnippet?: boolean
   filetypes?: string[]
   filepath?: string
@@ -951,12 +1286,10 @@ export interface ISource {
   shouldCommit?(item: VimCompleteItem, character: string): boolean
 }
 
+export type SourceConfig = Omit<Partial<ISource>, 'shortcut' | 'priority' | 'triggerOnly' | 'triggerCharacters' | 'triggerPatterns' | 'enable' | 'filetypes' | 'disableSyntaxes'>
 // Config property of source
-export interface SourceConfig extends ISource {
-  filepath?: string
-  optionalFns?: string[]
-  shortcut?: string
-}
+// export interface SourceConfig extends ISource {
+// }
 
 /**
  * A diagnostics collection is a container that manages a set of
@@ -1071,19 +1404,20 @@ export interface TextDocumentWillSaveEvent {
    *
    * @param thenable A thenable that resolves to [pre-save-edits](#TextEdit).
    */
-  waitUntil?(thenable: Thenable<TextEdit[] | any>): void
+  waitUntil(thenable: Thenable<TextEdit[] | any>): void
 }
 
 export interface Thenable<T> {
   then<TResult>(onfulfilled?: (value: T) => TResult | Thenable<TResult>, onrejected?: (reason: any) => TResult | Thenable<TResult>): Thenable<TResult>
-  then<TResult>(onfulfilled?: (value: T) => TResult | Thenable<TResult>, onrejected?: (reason: any) => void): Thenable<TResult> // tslint:disable-line
+  // eslint-disable-next-line @typescript-eslint/unified-signatures
+  then<TResult>(onfulfilled?: (value: T) => TResult | Thenable<TResult>, onrejected?: (reason: any) => void): Thenable<TResult>
 }
 
 /**
  * An output channel is a container for readonly textual information.
  *
  * To get an instance of an `OutputChannel` use
- * [createOutputChannel](#workspace.createOutputChannel).
+ * [createOutputChannel](#window.createOutputChannel).
  */
 export interface OutputChannel {
 
@@ -1109,9 +1443,9 @@ export interface OutputChannel {
   appendLine(value: string): void
 
   /**
-   * Removes all output from the channel.
+   * Removes output from the channel. Latest `keep` lines will be remained.
    */
-  clear(): void
+  clear(keep?: number): void
 
   /**
    * Reveal this channel in the UI.
@@ -1236,18 +1570,15 @@ export interface IWorkspace {
   readonly configurations: Configurations
   textDocuments: TextDocument[]
   workspaceFolder: WorkspaceFolder
-  onDidOpenTextDocument: Event<TextDocument>
-  onDidCloseTextDocument: Event<TextDocument>
+  onDidOpenTextDocument: Event<TextDocument & { bufnr: number }>
+  onDidCloseTextDocument: Event<TextDocument & { bufnr: number }>
   onDidChangeTextDocument: Event<DidChangeTextDocumentParams>
   onWillSaveTextDocument: Event<TextDocumentWillSaveEvent>
   onDidSaveTextDocument: Event<TextDocument>
   onDidChangeConfiguration: Event<ConfigurationChangeEvent>
   onDidWorkspaceInitialized: Event<void>
-  onWillSaveUntil(callback: (event: TextDocumentWillSaveEvent) => void, thisArg: any, clientId: string): Disposable
-  showMessage(msg: string, identify?: MsgTypes): void
   findUp(filename: string | string[]): Promise<string | null>
   getDocument(uri: number | string): Document
-  getOffset(): Promise<number>
   getFormatOptions(uri?: string): Promise<FormattingOptions>
   getConfigFile(target: ConfigurationTarget): string
   applyEdit(edit: WorkspaceEdit): Promise<boolean>
@@ -1257,23 +1588,14 @@ export interface IWorkspace {
   getQuickfixItem(loc: Location, text?: string, type?: string): Promise<QuickfixItem>
   getLine(uri: string, line: number): Promise<string>
   readFile(uri: string): Promise<string>
-  echoLines(lines: string[], truncate?: boolean): Promise<void>
   getCurrentState(): Promise<EditerState>
-  getCursorPosition(): Promise<Position>
   jumpTo(uri: string, position: Position): Promise<void>
   createFile(filepath: string, opts?: CreateFileOptions): Promise<void>
   renameFile(oldPath: string, newPath: string, opts?: RenameFileOptions): Promise<void>
   deleteFile(filepath: string, opts?: DeleteFileOptions): Promise<void>
   openResource(uri: string): Promise<void>
-  createOutputChannel(name: string): OutputChannel
-  showOutputChannel(name: string): void
   resolveModule(name: string): Promise<string>
-  showQuickpick(items: string[], placeholder?: string): Promise<number>
-  showPrompt(title: string): Promise<boolean>
-  requestInput(title: string, defaultValue?: string): Promise<string>
   match(selector: DocumentSelector, document: TextDocument): number
   runCommand(cmd: string, cwd?: string, timeout?: number): Promise<string>
-  runTerminalCommand(cmd: string, cwd?: string, keepfocus?: boolean): Promise<TerminalResult>
-  createStatusBarItem(priority?: number): StatusBarItem
   dispose(): void
 }

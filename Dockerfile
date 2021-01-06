@@ -15,7 +15,6 @@ git \
 sudo \
 curl \
 wget \
-vim \
 rsync \
 && rm -rf /var/lib/apt/lists/*
 

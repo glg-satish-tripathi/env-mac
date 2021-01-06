@@ -29,9 +29,7 @@ export default class Complete {
     private sources: ISource[],
     private nvim: Neovim) {
     Object.defineProperty(this, 'recentScores', {
-      get: (): RecentScore => {
-        return recentScores || {}
-      }
+      get: (): RecentScore => recentScores || {}
     })
   }
 
@@ -56,7 +54,7 @@ export default class Complete {
   }
 
   public get isIncomplete(): boolean {
-    return this.results.findIndex(o => o.isIncomplete == true) !== -1
+    return this.results.findIndex(o => o.isIncomplete) !== -1
   }
 
   private async completeSource(source: ISource): Promise<void> {
@@ -64,7 +62,7 @@ export default class Complete {
     // new option for each source
     let opt = Object.assign({}, this.option)
     let timeout = this.config.timeout
-    timeout = Math.max(Math.min(timeout, 5000), 1000)
+    timeout = Math.max(Math.min(timeout, 15000), 500)
     try {
       if (typeof source.shouldComplete === 'function') {
         let shouldRun = await Promise.resolve(source.shouldComplete(opt))
@@ -87,7 +85,7 @@ export default class Complete {
         let ft = setTimeout(() => {
           if (called) return
           empty = true
-          resolve()
+          resolve(undefined)
         }, FIRST_TIMEOUT)
         let onFinished = () => {
           if (called) return
@@ -103,7 +101,7 @@ export default class Complete {
           cancelled = true
           onFinished()
           logger.debug(`Source "${name}" cancelled`)
-          resolve()
+          resolve(undefined)
         })
         this.completing.add(name)
         Promise.resolve(source.doComplete(opt, tokenSource.token)).then(result => {
@@ -128,9 +126,9 @@ export default class Complete {
               }
             }
             if (empty) this._onDidComplete.fire()
-            resolve()
+            resolve(undefined)
           } else {
-            resolve()
+            resolve(undefined)
           }
         }, err => {
           this.completing.delete(name)
@@ -146,11 +144,11 @@ export default class Complete {
 
   public async completeInComplete(resumeInput: string): Promise<VimCompleteItem[]> {
     let { results, document } = this
-    let remains = results.filter(res => res.isIncomplete != true)
+    let remains = results.filter(res => !res.isIncomplete)
     remains.forEach(res => {
       res.items.forEach(item => delete item.user_data)
     })
-    let arr = results.filter(res => res.isIncomplete == true)
+    let arr = results.filter(res => res.isIncomplete)
     let names = arr.map(o => o.source)
     let { input, colnr, linenr } = this.option
     Object.assign(this.option, {
@@ -160,7 +158,7 @@ export default class Complete {
       triggerCharacter: null,
       triggerForInComplete: true
     })
-    let sources = this.sources.filter(s => names.indexOf(s.name) !== -1)
+    let sources = this.sources.filter(s => names.includes(s.name))
     await Promise.all(sources.map(s => this.completeSource(s)))
     return this.filterResults(resumeInput, Math.floor(Date.now() / 1000))
   }
@@ -174,30 +172,32 @@ export default class Complete {
     })
     let now = Date.now()
     let { bufnr } = this.option
-    let { snippetIndicator, removeDuplicateItems, fixInsertedWord } = this.config
+    let { snippetIndicator, removeDuplicateItems, fixInsertedWord, asciiCharactersOnly } = this.config
     let followPart = (!fixInsertedWord || cid == 0) ? '' : this.getFollowPart()
     if (results.length == 0) return []
-    // max score of high priority source
-    let maxScore = 0
     let arr: VimCompleteItem[] = []
     let codes = getCharCodes(input)
     let words: Set<string> = new Set()
     for (let i = 0, l = results.length; i < l; i++) {
       let res = results[i]
       let { items, source, priority } = res
-      // tslint:disable-next-line: prefer-for-of
       for (let idx = 0; idx < items.length; idx++) {
         let item = items[idx]
+        if (!item || typeof item.word !== 'string') {
+          continue
+        }
         let { word } = item
-        if ((!item.dup || source == 'tabnine') && words.has(word)) continue
-        if (removeDuplicateItems && !item.isSnippet && words.has(word)) continue
+        // eslint-disable-next-line no-control-regex
+        if (asciiCharactersOnly && !/^[\x00-\x7F]*$/.test(word)) {
+          continue
+        }
+        if (!item.dup && words.has(word)) continue
+        if (removeDuplicateItems && !item.isSnippet && words.has(word) && item.line == undefined) continue
         let filterText = item.filterText || item.word
         item.filterText = filterText
         if (filterText.length < input.length) continue
         let score = item.kind && filterText == input ? 64 : matchScore(filterText, codes)
         if (input.length && score == 0) continue
-        if (priority > 90) maxScore = Math.max(maxScore, score)
-        if (maxScore > 5 && priority <= 10 && score < maxScore) continue
         if (followPart.length && !item.isSnippet) {
           if (item.word.endsWith(followPart)) {
             let { word } = item
@@ -223,12 +223,10 @@ export default class Complete {
           } else {
             item.recentScore = 0
           }
-        } else {
-          delete item.sortText
         }
         item.priority = priority
         item.abbr = item.abbr || item.word
-        item.score = input.length ? score : 0
+        item.score = input.length ? score * (item.sourceScore || 1) : 0
         item.localBonus = this.localBonus ? this.localBonus.get(filterText) || 0 : 0
         words.add(word)
         if (item.isSnippet && item.word == input) {
@@ -288,9 +286,7 @@ export default class Complete {
     let codes = getCharCodes(input)
     for (let i = 0, l = results.length; i < l; i++) {
       let items = results[i].items
-      let idx = items.findIndex(item => {
-        return fuzzyMatch(codes, item.filterText || item.word)
-      })
+      let idx = items.findIndex(item => fuzzyMatch(codes, item.filterText || item.word))
       if (idx !== -1) return true
     }
     return false
@@ -343,10 +339,11 @@ export default class Complete {
     let idx = characterIndex(line, colnr - 1)
     if (idx == line.length) return ''
     let part = line.slice(idx - line.length)
-    return part.match(/^\S?[\w\-]*/)[0]
+    return part.match(/^\S?[\w-]*/)[0]
   }
 
   public dispose(): void {
+    if (this._canceled) return
     this._onDidComplete.dispose()
     this._canceled = true
     for (let tokenSource of this.tokenSources.values()) {

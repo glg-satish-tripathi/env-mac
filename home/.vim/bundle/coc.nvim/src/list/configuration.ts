@@ -1,9 +1,12 @@
 import workspace from '../workspace'
+import window from '../window'
 import { WorkspaceConfiguration } from '../types'
+import { EventEmitter } from 'events'
 import { Disposable } from 'vscode-languageserver-protocol'
 
 export const validKeys = [
   '<esc>',
+  '<space>',
   '<tab>',
   '<s-tab>',
   '<bs>',
@@ -75,14 +78,16 @@ export const validKeys = [
   '<A-z>',
 ]
 
-export default class ListConfiguration {
+export default class ListConfiguration extends EventEmitter {
   private configuration: WorkspaceConfiguration
   private disposable: Disposable
   constructor() {
+    super()
     this.configuration = workspace.getConfiguration('list')
     this.disposable = workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('list')) {
         this.configuration = workspace.getConfiguration('list')
+        this.emit('change')
       }
     })
   }
@@ -101,13 +106,14 @@ export default class ListConfiguration {
 
   public dispose(): void {
     this.disposable.dispose()
+    this.removeAllListeners()
   }
 
   public fixKey(key: string): string {
-    if (validKeys.indexOf(key) !== -1) return key
+    if (validKeys.includes(key)) return key
     let find = validKeys.find(s => s.toLowerCase() == key.toLowerCase())
     if (find) return find
-    workspace.showMessage(`Configured key "${key}" invalid.`, 'error')
+    window.showMessage(`Configured key "${key}" not supported.`, 'error')
     return null
   }
 }

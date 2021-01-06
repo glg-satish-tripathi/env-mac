@@ -1,5 +1,5 @@
 import { exec } from 'child_process'
-import fs from 'fs'
+import fs from 'fs-extra'
 import net from 'net'
 import os from 'os'
 import path from 'path'
@@ -13,8 +13,8 @@ export type OnReadLine = (line: string) => void
 export async function statAsync(filepath: string): Promise<fs.Stats | null> {
   let stat = null
   try {
-    stat = await util.promisify(fs.stat)(filepath)
-  } catch (e) { } // tslint:disable-line
+    stat = await fs.stat(filepath)
+  } catch (e) { }
   return stat
 }
 
@@ -25,8 +25,8 @@ export async function isDirectory(filepath: string): Promise<boolean> {
 
 export async function unlinkAsync(filepath: string): Promise<void> {
   try {
-    await util.promisify(fs.unlink)(filepath)
-  } catch (e) { } // tslint:disable-line
+    await fs.unlink(filepath)
+  } catch (e) { }
 }
 
 export function renameAsync(oldPath: string, newPath: string): Promise<void> {
@@ -46,30 +46,45 @@ export async function isGitIgnored(fullpath: string): Promise<boolean> {
   try {
     let { stdout } = await util.promisify(exec)('git rev-parse --show-toplevel', { cwd: path.dirname(fullpath) })
     root = stdout.trim()
-  } catch (e) { } // tslint:disable-line
+  } catch (e) { }
   if (!root) return false
   let file = path.relative(root, fullpath)
   try {
     let { stdout } = await util.promisify(exec)(`git check-ignore ${file}`, { cwd: root })
     return stdout.trim() == file
-  } catch (e) { } // tslint:disable-line
+  } catch (e) { }
   return false
 }
 
-export function resolveRoot(dir: string, subs: string[], cwd?: string): string | null {
+export function resolveRoot(folder: string, subs: string[], cwd?: string, bottomup = false): string | null {
   let home = os.homedir()
+  let dir = fixDriver(folder)
   if (isParentFolder(dir, home, true)) return null
   if (cwd && isParentFolder(cwd, dir, true) && inDirectory(cwd, subs)) return cwd
   let parts = dir.split(path.sep)
-  let curr: string[] = [parts.shift()]
-  for (let part of parts) {
-    curr.push(part)
-    let dir = curr.join(path.sep)
-    if (dir != home && inDirectory(dir, subs)) {
-      return dir
+  if (bottomup) {
+    while (parts.length > 0) {
+      let dir = parts.join(path.sep)
+      if (dir == home) {
+          break
+      }
+      if (dir != home && inDirectory(dir, subs)) {
+        return dir
+      }
+      parts.pop()
     }
-  }
   return null
+  } else {
+    let curr: string[] = [parts.shift()]
+    for (let part of parts) {
+      curr.push(part)
+      let dir = curr.join(path.sep)
+      if (dir != home && inDirectory(dir, subs)) {
+        return dir
+      }
+    }
+    return null
+  }
 }
 
 export function inDirectory(dir: string, subs: string[]): boolean {
@@ -77,10 +92,10 @@ export function inDirectory(dir: string, subs: string[]): boolean {
     let files = fs.readdirSync(dir)
     for (let pattern of subs) {
       // note, only '*' expanded
-      let is_wildcard = (pattern.indexOf('*') !== -1)
+      let is_wildcard = (pattern.includes('*'))
       let res = is_wildcard ?
         (minimatch.match(files, pattern, { nobrace: true, noext: true, nocomment: true, nonegate: true, dot: true }).length !== 0) :
-        (files.indexOf(pattern) !== -1)
+        (files.includes(pattern))
       if (res) return true
     }
   } catch (e) {
@@ -130,6 +145,9 @@ export function getFileLineCount(filepath: string): Promise<number> {
 }
 
 export function readFileLines(fullpath: string, start: number, end: number): Promise<string[]> {
+  if (!fs.existsSync(fullpath)) {
+    return Promise.reject(new Error(`file does not exist: ${fullpath}`))
+  }
   let res: string[] = []
   const rl = readline.createInterface({
     input: fs.createReadStream(fullpath, { encoding: 'utf8' }),
@@ -159,6 +177,9 @@ export function readFileLines(fullpath: string, start: number, end: number): Pro
 }
 
 export function readFileLine(fullpath: string, count: number): Promise<string> {
+  if (!fs.existsSync(fullpath)) {
+    return Promise.reject(new Error(`file does not exist: ${fullpath}`))
+  }
   const rl = readline.createInterface({
     input: fs.createReadStream(fullpath, { encoding: 'utf8' }),
     crlfDelay: Infinity,
@@ -183,7 +204,7 @@ export function readFileLine(fullpath: string, count: number): Promise<string> {
 }
 
 export async function writeFile(fullpath: string, content: string): Promise<void> {
-  await util.promisify(fs.writeFile)(fullpath, content, 'utf8')
+  await fs.writeFile(fullpath, content, { encoding: 'utf8' })
 }
 
 export function validSocket(path: string): Promise<boolean> {
@@ -202,10 +223,6 @@ export function validSocket(path: string): Promise<boolean> {
 export function isFile(uri: string): boolean {
   return uri.startsWith('file:')
 }
-
-export const readdirAsync = util.promisify(fs.readdir)
-
-export const realpathAsync = util.promisify(fs.realpath)
 
 export function parentDirs(pth: string): string[] {
   let { root, dir } = path.parse(pth)

@@ -1,14 +1,14 @@
 import { Neovim } from '@chemzqm/neovim'
 import * as language from 'vscode-languageserver-protocol'
-import { Disposable, Location, Position, TextEdit, CodeAction, Range, WorkspaceEdit, TextDocumentEdit } from 'vscode-languageserver-protocol'
-import { wait } from './util'
-import workspace from './workspace'
+import { CodeAction, Disposable, Location, Position, Range, TextDocumentEdit, TextEdit, WorkspaceEdit } from 'vscode-languageserver-protocol'
+import { URI } from 'vscode-uri'
+import diagnosticManager from './diagnostic/manager'
+import Mru from './model/mru'
 import Plugin from './plugin'
 import snipetsManager from './snippets/manager'
-import diagnosticManager from './diagnostic/manager'
-import { URI } from 'vscode-uri'
-import Mru from './model/mru'
-import Handler from './handler'
+import { wait } from './util'
+import workspace from './workspace'
+import window from './window'
 const logger = require('./util/logger')('commands')
 
 // command center
@@ -52,18 +52,15 @@ export class CommandManager implements Disposable {
     }, true)
     this.register({
       id: 'workbench.action.reloadWindow',
-      execute: () => {
-        nvim.command('CocRestart', true)
+      execute: async () => {
+        await nvim.command('edit')
       }
     }, true)
     this.register({
       id: 'editor.action.insertSnippet',
       execute: async (edit: TextEdit) => {
-        let doc = workspace.getDocument(workspace.bufnr)
-        if (!doc) return
-        await nvim.call('coc#_cancel', [])
-        if (doc.dirty) doc.forceSync()
-        await snipetsManager.insertSnippet(edit.newText, true, edit.range)
+        nvim.call('coc#_cancel', [], true)
+        return await snipetsManager.insertSnippet(edit.newText, true, edit.range)
       }
     }, true)
     this.register({
@@ -75,7 +72,7 @@ export class CommandManager implements Disposable {
     this.register({
       id: 'editor.action.triggerSuggest',
       execute: async () => {
-        await wait(100)
+        await wait(60)
         nvim.call('coc#start', [], true)
       }
     }, true)
@@ -123,14 +120,14 @@ export class CommandManager implements Disposable {
       execute: async () => {
         let document = await workspace.document
         if (!document) return
-        let lines = document.content.split('\n')
-        await nvim.call('coc#util#diff_content', [lines])
+        await nvim.call('coc#util#diff_content', [document.getLines()])
       }
-    }, true)
+    })
     this.register({
       id: 'workspace.clearWatchman',
       execute: async () => {
-        await workspace.runCommand('watchman watch-del-all')
+        let res = await window.runTerminalCommand('watchman watch-del-all')
+        if (res.success) window.showMessage('Cleared watchman watching directories.')
       }
     }, false, 'run watch-del-all for watchman to free up memory.')
     this.register({
@@ -138,7 +135,7 @@ export class CommandManager implements Disposable {
       execute: async () => {
         let folders = workspace.workspaceFolders
         let lines = folders.map(folder => URI.parse(folder.uri).fsPath)
-        await workspace.echoLines(lines)
+        await window.echoLines(lines)
       }
     }, false, 'show opened workspaceFolders.')
     this.register({
@@ -154,38 +151,45 @@ export class CommandManager implements Disposable {
         let interval = config.get<string>('extensionUpdateCheck', 'daily')
         if (interval == 'never') {
           config.update('extensionUpdateCheck', 'daily', true)
-          workspace.showMessage('Extension auto update enabled.', 'more')
+          window.showMessage('Extension auto update enabled.', 'more')
         } else {
           config.update('extensionUpdateCheck', 'never', true)
-          workspace.showMessage('Extension auto update disabled.', 'more')
+          window.showMessage('Extension auto update disabled.', 'more')
         }
       }
     }, false, 'toggle auto update of extensions.')
     this.register({
       id: 'workspace.diagnosticRelated',
-      execute: () => {
-        return diagnosticManager.jumpRelated()
-      }
+      execute: () => diagnosticManager.jumpRelated()
     }, false, 'jump to related locations of current diagnostic.')
     this.register({
       id: 'workspace.showOutput',
       execute: async (name?: string) => {
         if (name) {
-          workspace.showOutputChannel(name)
+          window.showOutputChannel(name)
         } else {
           let names = workspace.channelNames
           if (names.length == 0) return
           if (names.length == 1) {
-            workspace.showOutputChannel(names[0])
+            window.showOutputChannel(names[0])
           } else {
-            let idx = await workspace.showQuickpick(names)
+            let idx = await window.showQuickpick(names)
             if (idx == -1) return
             let name = names[idx]
-            workspace.showOutputChannel(name)
+            window.showOutputChannel(name)
           }
         }
       }
     }, false, 'open output buffer to show output from languageservers or extensions.')
+    this.register({
+      id: 'document.echoFiletype',
+      execute: async () => {
+        let bufnr = await nvim.call('bufnr', '%')
+        let doc = workspace.getDocument(bufnr)
+        if (!doc) return
+        await window.echoLines([doc.filetype])
+      }
+    }, false, 'echo the mapped filetype of the current buffer')
     this.register({
       id: 'document.renameCurrentWord',
       execute: async () => {
@@ -194,7 +198,7 @@ export class CommandManager implements Disposable {
         if (!doc) return
         let edit = await plugin.cocAction('getWordEdit') as WorkspaceEdit
         if (!edit) {
-          workspace.showMessage('Invalid position', 'warning')
+          window.showMessage('Invalid position', 'warning')
           return
         }
         let ranges: Range[] = []
@@ -222,7 +226,7 @@ export class CommandManager implements Disposable {
         let ranges = await plugin.cocAction('symbolRanges') as Range[]
         if (!ranges) return
         let { textDocument } = doc
-        let offset = await workspace.getOffset()
+        let offset = await window.getOffset()
         ranges.sort((a, b) => {
           if (a.start.line != b.start.line) {
             return a.start.line - b.start.line
@@ -231,13 +235,37 @@ export class CommandManager implements Disposable {
         })
         for (let i = 0; i <= ranges.length - 1; i++) {
           if (textDocument.offsetAt(ranges[i].start) > offset) {
-            await workspace.moveTo(ranges[i].start)
+            await window.moveTo(ranges[i].start)
             return
           }
         }
-        await workspace.moveTo(ranges[0].start)
+        await window.moveTo(ranges[0].start)
       }
     }, false, 'Jump to next symbol highlight position.')
+    this.register({
+      id: 'document.jumpToPrevSymbol',
+      execute: async () => {
+        let doc = await workspace.document
+        if (!doc) return
+        let ranges = await plugin.cocAction('symbolRanges') as Range[]
+        if (!ranges) return
+        let { textDocument } = doc
+        let offset = await window.getOffset()
+        ranges.sort((a, b) => {
+          if (a.start.line != b.start.line) {
+            return a.start.line - b.start.line
+          }
+          return a.start.character - b.start.character
+        })
+        for (let i = ranges.length - 1; i >= 0; i--) {
+          if (textDocument.offsetAt(ranges[i].end) < offset) {
+            await window.moveTo(ranges[i].start)
+            return
+          }
+        }
+        await window.moveTo(ranges[ranges.length - 1].start)
+      }
+    }, false, 'Jump to previous symbol highlight position.')
   }
 
   public get commandList(): CommandItem[] {
@@ -294,7 +322,7 @@ export class CommandManager implements Disposable {
    * @return Disposable which unregisters this command on disposal.
    */
   public registerCommand(id: string, impl: (...args: any[]) => void, thisArg?: any, internal = false): Disposable {
-    if (/^_/.test(id)) internal = true
+    if (id.startsWith("_")) internal = true
     this.commands.set(id, new CommandItem(id, impl, thisArg, internal))
     return Disposable.create(() => {
       this.commands.delete(id)
@@ -318,11 +346,11 @@ export class CommandManager implements Disposable {
   public executeCommand(command: string, ...rest: any[]): Promise<any> {
     let cmd = this.commands.get(command)
     if (!cmd) {
-      workspace.showMessage(`Command: ${command} not found`, 'error')
+      window.showMessage(`Command: ${command} not found`, 'error')
       return
     }
     return Promise.resolve(cmd.execute.apply(cmd, rest)).catch(e => {
-      workspace.showMessage(`Command error: ${e.message}`, 'error')
+      window.showMessage(`Command error: ${e.message}`, 'error')
       logger.error(e.stack)
     })
   }

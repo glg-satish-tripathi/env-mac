@@ -2,11 +2,12 @@ import watchman, { Client } from 'fb-watchman'
 import os from 'os'
 import path from 'path'
 import { OutputChannel } from './types'
-import uuidv1 = require('uuid/v1')
+import { v1 as uuidv1 } from 'uuid'
 import { Disposable } from 'vscode-languageserver-protocol'
 import minimatch from 'minimatch'
+import { isParentFolder } from './util/fs'
 const logger = require('./util/logger')('watchman')
-const requiredCapabilities = ['relative_root', 'cmd-watch-project', 'wildmatch']
+const requiredCapabilities = ['relative_root', 'cmd-watch-project', 'wildmatch', 'field-new']
 
 export interface WatchResponse {
   warning?: string
@@ -19,6 +20,7 @@ export interface FileChangeItem {
   size: number
   name: string
   exists: boolean
+  new: boolean
   type: 'f' | 'd'
   mtime_ms: number
 }
@@ -102,7 +104,7 @@ export default class Watchman {
     let uid = uuidv1()
     let sub: any = {
       expression: ['allof', ['match', '**/*', 'wholename']],
-      fields: ['name', 'size', 'exists', 'type', 'mtime_ms', 'ctime_ms'],
+      fields: ['name', 'size', 'new', 'exists', 'type', 'mtime_ms', 'ctime_ms'],
       since: clock,
     }
     let root = watch
@@ -116,18 +118,15 @@ export default class Watchman {
     this.client.on('subscription', resp => {
       if (!resp || resp.subscription != uid) return
       let { files } = resp as FileChange
-      if (!files || !files.length || !minimatch(files[0].name, globPattern)) return
-      files = files.filter(f => f.type == 'f')
+      if (!files) return
+      files = files.filter(f => f.type == 'f' && minimatch(f.name, globPattern, { dot: true }))
+      if (!files.length) return
       let ev: FileChange = Object.assign({}, resp)
       if (this.relative_path) ev.root = path.resolve(resp.root, this.relative_path)
-      // resp.root = this.relative_path
-      files.map(f => f.mtime_ms = +f.mtime_ms)
       this.appendOutput(`file change detected: ${JSON.stringify(ev, null, 2)}`)
       cb(ev)
     })
-    return Disposable.create(() => {
-      return this.unsubscribe(subscribe)
-    })
+    return Disposable.create(() => this.unsubscribe(subscribe))
   }
 
   public unsubscribe(subscription: string): Promise<any> {
@@ -141,6 +140,7 @@ export default class Watchman {
   }
 
   public dispose(): void {
+    if (this._disposed) return
     this._disposed = true
     this.client.removeAllListeners()
     this.client.end()
@@ -163,7 +163,7 @@ export default class Watchman {
   }
 
   public static createClient(binaryPath: string, root: string, channel?: OutputChannel): Promise<Watchman | null> {
-    if (root == os.homedir() || root == '/' || path.parse(root).base == root) return null
+    if (!isValidWatchRoot(root)) return null
     let client = clientsMap.get(root)
     if (client) return client
     let promise = new Promise<Watchman | null>(async (resolve, reject) => {
@@ -181,4 +181,16 @@ export default class Watchman {
     clientsMap.set(root, promise)
     return promise
   }
+}
+
+/**
+ * Exclude user's home, driver, tmpdir
+ */
+export function isValidWatchRoot(root: string): boolean {
+  if (root == '/' || root == '/tmp' || root == '/private/tmp') return false
+  if (root.toLowerCase() === os.homedir().toLowerCase()) return false
+  if (path.parse(root).base == root) return false
+  if (root.startsWith('/tmp/') || root.startsWith('/private/tmp/')) return false
+  if (isParentFolder(os.tmpdir(), root, true)) return false
+  return true
 }

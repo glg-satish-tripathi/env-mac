@@ -1,114 +1,90 @@
-import { Buffer, Neovim } from '@chemzqm/neovim'
+import { Neovim } from '@chemzqm/neovim'
 import { Disposable } from 'vscode-languageserver-protocol'
 import { OutputChannel } from '../types'
 import { disposeAll } from '../util'
-import workspace from '../workspace'
-const logger = require('../util/logger')("outpubChannel")
+const logger = require('../util/logger')('outpubChannel')
 
 export default class BufferChannel implements OutputChannel {
-  private _content = ''
+  private _disposed = false
+  private lines: string[] = ['']
   private disposables: Disposable[] = []
-  private _showing = false
-  private promise = Promise.resolve(void 0)
   constructor(public name: string, private nvim: Neovim) {
   }
 
   public get content(): string {
-    return this._content
+    return this.lines.join('\n')
   }
 
-  private async _append(value: string, isLine: boolean): Promise<void> {
-    let { buffer } = this
-    if (!buffer) return
-    try {
-      if (isLine) {
-        await buffer.append(value.split('\n'))
-      } else {
-        let last = await this.nvim.call('getbufline', [buffer.id, '$'])
-        let content = last + value
-        if (this.buffer) {
-          await buffer.setLines(content.split('\n'), {
-            start: -2,
-            end: -1,
-            strictIndexing: false
-          })
-        }
-      }
-    } catch (e) {
-      logger.error(`Error on append output:`, e)
+  private _append(value: string): void {
+    let { nvim } = this
+    let idx = this.lines.length - 1
+    let newlines = value.split('\n')
+    let lastline = this.lines[idx] + newlines[0]
+    this.lines[idx] = lastline
+    let append = newlines.slice(1)
+    this.lines = this.lines.concat(append)
+    nvim.pauseNotification()
+    nvim.call('setbufline', [this.bufname, '$', lastline], true)
+    if (append.length) {
+      nvim.call('appendbufline', [this.bufname, '$', append], true)
     }
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    nvim.resumeNotification(false, true)
   }
 
   public append(value: string): void {
-    this._content += value
-    this.promise = this.promise.then(() => {
-      return this._append(value, false)
-    })
+    if (!this.validate()) return
+    this._append(value)
   }
 
   public appendLine(value: string): void {
-    this._content += value + '\n'
-    this.promise = this.promise.then(() => {
-      return this._append(value, true)
-    })
+    if (!this.validate()) return
+    this._append(value + '\n')
   }
 
-  public clear(): void {
-    this._content = ''
-    let { buffer } = this
-    if (buffer) {
-      Promise.resolve(buffer.setLines([], {
-        start: 0,
-        end: -1,
-        strictIndexing: false
-      })).catch(_e => {
-        // noop
-      })
+  public clear(keep?: number): void {
+    if (!this.validate()) return
+    let { nvim } = this
+    this.lines = keep ? this.lines.slice(-keep) : []
+    nvim.pauseNotification()
+    nvim.call('deletebufline', [this.bufname, 1, '$'], true)
+    if (this.lines.length) {
+      nvim.call('appendbufline', [this.bufname, '$', this.lines], true)
     }
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    nvim.resumeNotification(false, true)
   }
 
   public hide(): void {
-    let { nvim, buffer } = this
-    if (buffer) nvim.command(`silent! bd! ${buffer.id}`, true)
+    this.nvim.command(`exe 'silent! bd! '.fnameescape('${this.bufname}')`, true)
   }
 
-  public dispose(): void {
-    this.hide()
-    this._content = ''
-    disposeAll(this.disposables)
-  }
-
-  private get buffer(): Buffer | null {
-    let doc = workspace.getDocument(`output:///${this.name}`)
-    return doc ? doc.buffer : null
-  }
-
-  private async openBuffer(preserveFocus?: boolean): Promise<void> {
-    let { nvim, buffer } = this
-    if (buffer) {
-      let loaded = await nvim.call('bufloaded', buffer.id)
-      if (!loaded) buffer = null
-    }
-    if (!buffer) {
-      await nvim.command(`belowright vs output:///${this.name}`)
-    } else {
-      // check shown
-      let wnr = await nvim.call('bufwinnr', buffer.id)
-      if (wnr != -1) return
-      await nvim.command(`vert belowright sb ${buffer.id}`)
-    }
-    if (preserveFocus) {
-      await nvim.command('wincmd p')
-    }
+  private get bufname(): string {
+    return `output:///${this.name}`
   }
 
   public show(preserveFocus?: boolean): void {
-    if (this._showing) return
-    this._showing = true
-    this.openBuffer(preserveFocus).then(() => {
-      this._showing = false
-    }, () => {
-      this._showing = false
-    })
+    let { nvim } = this
+    nvim.pauseNotification()
+    nvim.command(`exe 'vsplit '.fnameescape('${this.bufname}')`, true)
+    if (preserveFocus) {
+      nvim.command('wincmd p', true)
+    }
+    nvim.command('redraw', true)
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    nvim.resumeNotification(false, true)
+  }
+
+  private validate(): boolean {
+    if (this._disposed) return false
+    return true
+  }
+
+  public dispose(): void {
+    if (this._disposed) return
+    this._disposed = true
+    this.hide()
+    this.lines = []
+    disposeAll(this.disposables)
   }
 }

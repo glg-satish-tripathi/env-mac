@@ -1,15 +1,13 @@
 import { Buffer, Neovim, Window } from '@chemzqm/neovim'
+import debounce from 'debounce'
 import { CancellationTokenSource, Disposable } from 'vscode-languageserver-protocol'
 import events from '../events'
-import snippetsManager from '../snippets/manager'
-import { Documentation, Env } from '../types'
+import { parseDocuments } from '../markdown'
+import { Documentation } from '../types'
 import { disposeAll } from '../util'
+import { Mutex } from '../util/mutex'
 import { equals } from '../util/object'
-import workspace from '../workspace'
-import FloatBuffer from './floatBuffer'
-import debounce from 'debounce'
-import createPopup, { Popup } from './popup'
-import { distinct } from '../util/array'
+const isVim = process.env.VIM_NODE_RPC == '1'
 const logger = require('../util/logger')('model-float')
 
 export interface WindowConfig {
@@ -18,269 +16,235 @@ export interface WindowConfig {
   col: number
   row: number
   relative: 'cursor' | 'win' | 'editor'
+  style?: string
+  cursorline?: number
+  title?: string
+  border?: number[]
+  autohide?: number
+  close?: number
 }
 
-// factory class for floating window
+export interface FloatWinConfig {
+  maxHeight?: number
+  maxWidth?: number
+  preferTop?: boolean
+  autoHide?: boolean
+  offsetX?: number
+  title?: string
+  border?: number[]
+  cursorline?: boolean
+  close?: boolean
+  highlight?: string
+  borderhighlight?: string
+  modes?: string[]
+}
+
+export interface ViewportConfig {
+  lines: number
+  columns: number
+  cmdheight: number
+}
+
+/**
+ * Float window/popup factory for create float/popup around current cursor.
+ */
 export default class FloatFactory implements Disposable {
   private targetBufnr: number
-  private window: Window
+  private winid = 0
+  private _bufnr = 0
+  private mutex: Mutex = new Mutex()
   private disposables: Disposable[] = []
-  private floatBuffer: FloatBuffer
   private tokenSource: CancellationTokenSource
   private alignTop = false
   private pumAlignTop = false
-  private createTs = 0
-  private cursor: [number, number] = [0, 0]
-  private popup: Popup
-  public shown = false
-  constructor(private nvim: Neovim,
-    private env: Env,
-    private preferTop = false,
-    private maxHeight = 999,
-    private maxWidth?: number,
-    private autoHide = true) {
-    if (!workspace.floatSupported) return
-    this.maxWidth = Math.min(maxWidth || 80, this.columns - 10)
+  private autoHide = true
+  private cursor: [number, number]
+  private onCursorMoved: ((bufnr: number, cursor: [number, number]) => void) & { clear(): void }
+  constructor(private nvim: Neovim) {
+    this.mutex = new Mutex()
     events.on('BufEnter', bufnr => {
-      if (this.buffer && bufnr == this.buffer.id) return
-      if (bufnr == this.targetBufnr) return
+      if (bufnr == this._bufnr
+        || bufnr == this.targetBufnr) return
       this.close()
     }, null, this.disposables)
-    events.on('InsertLeave', bufnr => {
-      if (this.buffer && bufnr == this.buffer.id) return
-      if (snippetsManager.isActived(bufnr)) return
+    events.on('InsertEnter', bufnr => {
+      if (bufnr == this._bufnr || !this.autoHide) return
       this.close()
     }, null, this.disposables)
-    events.on('MenuPopupChanged', async (ev, cursorline) => {
+    events.on('InsertLeave', () => {
+      this.close()
+    }, null, this.disposables)
+    events.on('MenuPopupChanged', (ev, cursorline) => {
       let pumAlignTop = this.pumAlignTop = cursorline > ev.row
       if (pumAlignTop == this.alignTop) {
         this.close()
       }
     }, null, this.disposables)
-    events.on('CursorMoved', debounce((bufnr, cursor) => {
-      if (Date.now() - this.createTs < 100) return
-      this.onCursorMoved(false, bufnr, cursor)
-    }, 100), null, this.disposables)
+    this.onCursorMoved = debounce(this._onCursorMoved.bind(this), 300)
+    events.on('CursorMoved', this.onCursorMoved.bind(this, false), null, this.disposables)
     events.on('CursorMovedI', this.onCursorMoved.bind(this, true), null, this.disposables)
+    this.disposables.push(Disposable.create(() => {
+      this.onCursorMoved.clear()
+      this.cancel()
+    }))
   }
 
-  private onCursorMoved(insertMode: boolean, bufnr: number, cursor: [number, number]): void {
-    if (!this.window || this.buffer && bufnr == this.buffer.id) return
-    if (bufnr == this.targetBufnr && equals(cursor, this.cursor)) return
+  private _onCursorMoved(insertMode: boolean, bufnr: number, cursor: [number, number]): void {
+    if (bufnr == this._bufnr) return
+    if (bufnr == this.targetBufnr && equals(cursor, this.cursor)) {
+      // cursor not moved
+      return
+    }
     if (this.autoHide) {
       this.close()
       return
     }
-    if (!insertMode || bufnr != this.targetBufnr || (this.cursor && cursor[0] != this.cursor[0])) {
+    if (!insertMode || bufnr != this.targetBufnr) {
       this.close()
       return
     }
   }
 
-  private async checkFloatBuffer(): Promise<void> {
-    let { floatBuffer, nvim, window } = this
-    if (this.env.textprop) {
-      let valid = await this.activated()
-      if (!valid) window = null
-      if (!window) {
-        this.popup = await createPopup(nvim, [''], {
-          padding: [0, 1, 0, 1],
-          highlight: 'CocFloating',
-          tab: -1,
-        })
-        let win = this.window = nvim.createWindow(this.popup.id)
-        nvim.pauseNotification()
-        win.setVar('float', 1, true)
-        win.setOption('linebreak', true, true)
-        win.setOption('showbreak', '', true)
-        win.setOption('conceallevel', 2, true)
-        await nvim.resumeNotification()
-      }
-      let buffer = this.nvim.createBuffer(this.popup.bufferId)
-      this.floatBuffer = new FloatBuffer(nvim, buffer, nvim.createWindow(this.popup.id))
-    } else {
-      if (floatBuffer) {
-        let valid = await floatBuffer.valid
-        if (valid) return
-      }
-      let buf = await this.nvim.createNewBuffer(false, true)
-      await buf.setOption('buftype', 'nofile')
-      await buf.setOption('bufhidden', 'hide')
-      this.floatBuffer = new FloatBuffer(this.nvim, buf)
-    }
-  }
-
-  private get columns(): number {
-    return this.env.columns
-  }
-
-  private get lines(): number {
-    return this.env.lines - this.env.cmdheight - 1
-  }
-
-  public async getBoundings(docs: Documentation[], offsetX = 0): Promise<WindowConfig> {
-    let { nvim, preferTop } = this
-    let { columns, lines } = this
-    let alignTop = false
-    let [row, col] = await nvim.call('coc#util#win_position') as [number, number]
-    let maxWidth = this.maxWidth
-    let height = this.floatBuffer.getHeight(docs, maxWidth)
-    height = Math.min(height, this.maxHeight)
-    if (!preferTop) {
-      if (lines - row < height && row > height) {
-        alignTop = true
-      }
-    } else {
-      if (row >= height || row >= lines - row) {
-        alignTop = true
-      }
-    }
-    if (alignTop) docs.reverse()
-    await this.floatBuffer.setDocuments(docs, maxWidth)
-    let { width } = this.floatBuffer
-    if (offsetX) {
-      offsetX = Math.min(col - 1, offsetX)
-      if (col - offsetX + width > columns) {
-        offsetX = col - offsetX + width - columns
-      }
-    }
-    this.alignTop = alignTop
-    return {
-      height: alignTop ? Math.max(1, Math.min(row, height)) : Math.max(1, Math.min(height, (lines - row))),
-      width: Math.min(columns, width),
-      row: alignTop ? - height : 1,
-      col: offsetX == 0 ? 0 : - offsetX,
-      relative: 'cursor'
-    }
-  }
-  public async create(docs: Documentation[], allowSelection = false, offsetX = 0): Promise<void> {
-    if (!workspace.floatSupported) {
-      logger.error('Floating window & textprop not supported!')
+  /**
+   * Create float window/popup at cursor position.
+   *
+   * @deprecated use show method instead
+   */
+  public async create(docs: Documentation[], _allowSelection = false, offsetX = 0): Promise<void> {
+    this.onCursorMoved.clear()
+    if (docs.length == 0 || docs.every(doc => doc.content.length == 0)) {
+      this.close()
       return
     }
-    let shown = await this.createPopup(docs, allowSelection, offsetX)
-    if (!shown) this.close(false)
+    let release = await this.mutex.acquire()
+    try {
+      await this.createPopup(docs, { offsetX })
+      release()
+    } catch (e) {
+      release()
+      logger.error(`Error on create popup:`, e.message)
+      this.close()
+    }
   }
 
-  private async createPopup(docs: Documentation[], allowSelection = false, offsetX = 0): Promise<boolean> {
-    if (this.tokenSource) {
-      this.tokenSource.cancel()
+  /**
+   * Show documentations in float window/popup around cursor.
+   * Window and buffer are reused when possible.
+   * Window is closed automatically on change buffer, InsertEnter, CursorMoved and CursorMovedI.
+   *
+   * @param docs List of documentations.
+   * @param config Configuration for floating window/popup.
+   */
+  public async show(docs: Documentation[], config: FloatWinConfig = {}): Promise<void> {
+    this.onCursorMoved.clear()
+    if (docs.length == 0 || docs.every(doc => doc.content.length == 0)) {
+      this.close()
+      return
     }
-    if (docs.length == 0) return false
-    this.createTs = Date.now()
-    this.targetBufnr = workspace.bufnr
+    let release = await this.mutex.acquire()
+    try {
+      await this.createPopup(docs, config)
+      release()
+    } catch (e) {
+      release()
+      logger.error(`Error on create popup:`, e.message)
+      this.close()
+    }
+  }
+
+  private async createPopup(docs: Documentation[], opts: FloatWinConfig): Promise<void> {
     let tokenSource = this.tokenSource = new CancellationTokenSource()
     let token = tokenSource.token
-    await this.checkFloatBuffer()
-    let config = await this.getBoundings(docs, offsetX)
-    let [mode, line, col, visible] = await this.nvim.eval('[mode(),line("."),col("."),pumvisible()]') as [string, number, number, number]
-    this.cursor = [line, col]
-    if (visible && this.alignTop == this.pumAlignTop) return false
-    if (!config || token.isCancellationRequested) return false
-    if (!this.checkMode(mode, allowSelection)) return false
-    let { nvim, alignTop } = this
-    if (mode == 's') await nvim.call('feedkeys', ['\x1b', 'in'])
-    // helps to fix undo issue, don't know why.
-    if (workspace.isNvim && mode.startsWith('i')) await nvim.eval('feedkeys("\\<C-g>u", "n")')
-    let reuse = false
-    if (workspace.isNvim) {
-      reuse = this.window && await this.window.valid
-      if (!reuse) this.window = await nvim.openFloatWindow(this.buffer, false, config)
+    docs = docs.filter(o => o.content.trim().length > 0)
+    let { lines, codes, highlights } = parseDocuments(docs)
+    let config: any = {
+      pumAlignTop: this.pumAlignTop,
+      preferTop: typeof opts.preferTop === 'boolean' ? opts.preferTop : false,
+      offsetX: opts.offsetX || 0,
+      title: opts.title || '',
+      close: opts.close ? 1 : 0,
+      codes,
+      highlights,
+      modes: opts.modes || ['n', 'i', 'ic', 's']
     }
-    if (token.isCancellationRequested) return false
-    nvim.pauseNotification()
-    if (workspace.isNvim) {
-      if (!reuse) {
-        nvim.command(`noa call win_gotoid(${this.window.id})`, true)
-        this.window.setVar('float', 1, true)
-        nvim.command(`setl nospell nolist wrap linebreak foldcolumn=1`, true)
-        nvim.command(`setl nonumber norelativenumber nocursorline nocursorcolumn colorcolumn=`, true)
-        nvim.command(`setl signcolumn=no conceallevel=2 concealcursor=n`, true)
-        nvim.command(`setl winhl=Normal:CocFloating,NormalNC:CocFloating,FoldColumn:CocFloating`, true)
-        nvim.call('coc#util#do_autocmd', ['CocOpenFloat'], true)
-      } else {
-        this.window.setConfig(config, true)
-        nvim.command(`noa call win_gotoid(${this.window.id})`, true)
-      }
-      this.floatBuffer.setLines()
-      nvim.command(`normal! ${alignTop ? 'G' : 'gg'}0`, true)
-      nvim.command('noa wincmd p', true)
-    } else {
-      let filetypes = distinct(docs.map(d => d.filetype))
-      if (filetypes.length == 1) {
-        this.popup.setFiletype(filetypes[0])
-      }
-      this.popup.move({
-        line: cursorPostion(config.row),
-        col: cursorPostion(config.col),
-        minwidth: config.width - 2,
-        minheight: config.height,
-        maxwidth: config.width - 2,
-        maxheight: config.height,
-        firstline: alignTop ? -1 : 1
-      })
-      this.floatBuffer.setLines()
-      nvim.command('redraw', true)
+    if (opts.maxHeight) config.maxHeight = opts.maxHeight
+    if (opts.maxWidth) config.maxWidth = opts.maxWidth
+    if (opts.border && !opts.border.every(o => o == 0)) {
+      config.border = opts.border
     }
-    let [, err] = await nvim.resumeNotification()
-    if (err) {
-      workspace.showMessage(`Error on ${err[0]}: ${err[1]} - ${err[2]}`, 'error')
-      return false
+    if (opts.title && !config.border) config.border = [1, 1, 1, 1]
+    if (opts.highlight) config.highlight = opts.highlight
+    if (opts.borderhighlight) config.borderhighlight = [opts.borderhighlight]
+    if (opts.cursorline) config.cursorline = 1
+    this.autoHide = opts.autoHide == false ? false : true
+    if (this.autoHide) config.autohide = 1
+    let arr = await this.nvim.call('coc#float#create_cursor_float', [this.winid, this._bufnr, lines, config])
+    if (isVim) this.nvim.command('redraw', true)
+    if (!arr || arr.length == 0) {
+      this.winid = null
+      return
     }
-    if (mode == 's') await snippetsManager.selectCurrentPlaceholder(false)
-    return true
-  }
-
-  private checkMode(mode: string, allowSelection: boolean): boolean {
-    if (mode == 's' && allowSelection) {
-      return true
+    let [targetBufnr, cursor, winid, bufnr] = arr as [number, [number, number], number, number]
+    this.winid = winid
+    if (token.isCancellationRequested) {
+      this.close()
+      return
     }
-    return ['i', 'n', 'ic'].indexOf(mode) != -1
+    let pos = await this.nvim.call('coc#float#cursor_relative', [winid]) as {
+      row: number
+      col: number
+    }
+    if (pos) this.alignTop = pos.row < 0
+    this._bufnr = bufnr
+    this.tokenSource.dispose()
+    this.tokenSource = null
+    this.targetBufnr = targetBufnr
+    this.cursor = cursor
+    this.onCursorMoved.clear()
   }
 
   /**
    * Close float window
    */
-  public close(cancel = true): void {
-    if (cancel && this.tokenSource) {
-      if (this.tokenSource) {
-        this.tokenSource.cancel()
-        this.tokenSource = null
-      }
+  public close(): void {
+    let { winid, nvim } = this
+    this.cancel()
+    if (winid) {
+      this.winid = 0
+      nvim.pauseNotification()
+      nvim.call('coc#float#close', [winid], true)
+      if (isVim) this.nvim.command('redraw', true)
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+      nvim.resumeNotification(false, true)
     }
-    let { window, popup } = this
-    this.shown = false
-    if (this.env.textprop) {
-      if (popup) popup.dispose()
-    } else if (window) {
-      window.close(true, true)
+  }
+
+  private cancel(): void {
+    let { tokenSource } = this
+    if (tokenSource) {
+      tokenSource.cancel()
+      this.tokenSource = null
     }
   }
 
   public dispose(): void {
-    if (this.tokenSource) {
-      this.tokenSource.cancel()
-    }
     disposeAll(this.disposables)
   }
 
-  public get buffer(): Buffer {
-    return this.floatBuffer ? this.floatBuffer.buffer : null
+  public get bufnr(): number {
+    return this._bufnr
+  }
+
+  public get buffer(): Buffer | null {
+    return this.bufnr ? this.nvim.createBuffer(this.bufnr) : null
+  }
+
+  public get window(): Window | null {
+    return this.winid ? this.nvim.createWindow(this.winid) : null
   }
 
   public async activated(): Promise<boolean> {
-    if (this.env.textprop) {
-      if (!this.popup) return false
-      return await this.popup.visible()
-    }
-    if (!this.window) return false
-    let valid = await this.window.valid
-    return valid
+    if (!this.winid) return false
+    return await this.nvim.call('coc#float#valid', [this.winid]) != 0
   }
-}
-
-function cursorPostion(n: number): string {
-  if (n == 0) return 'cursor'
-  if (n < 0) return `cursor${n}`
-  return `cursor+${n}`
 }

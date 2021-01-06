@@ -1,7 +1,8 @@
-import { CancellationToken, Disposable, DocumentSelector, FormattingOptions, Range, TextDocument, TextEdit } from 'vscode-languageserver-protocol'
+import { CancellationToken, Disposable, DocumentSelector, FormattingOptions, Range, TextEdit } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { DocumentRangeFormattingEditProvider } from './index'
 import Manager, { ProviderItem } from './manager'
-import uuid = require('uuid/v4')
+import { v4 as uuid } from 'uuid'
 
 export default class FormatRangeManager extends Manager<DocumentRangeFormattingEditProvider> implements Disposable {
 

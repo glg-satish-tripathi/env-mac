@@ -1,5 +1,5 @@
-import { CancellationToken, Disposable, DocumentSelector, Position, TextDocument, TextEdit } from 'vscode-languageserver-protocol'
-import { isWord } from '../util/string'
+import { CancellationToken, Disposable, DocumentSelector, Position, TextEdit } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import workspace from '../workspace'
 import { OnTypeFormattingEditProvider } from './index'
 const logger = require('../util/logger')('onTypeFormatManager')
@@ -38,7 +38,7 @@ export default class OnTypeFormatManager implements Disposable {
   public getProvider(document: TextDocument, triggerCharacter: string): OnTypeFormattingEditProvider | null {
     for (let o of this.providers) {
       let { triggerCharacters, selector } = o
-      if (workspace.match(selector, document) > 0 && triggerCharacters.indexOf(triggerCharacter) > -1) {
+      if (workspace.match(selector, document) > 0 && triggerCharacters.includes(triggerCharacter)) {
         return o.provider
       }
     }
@@ -46,7 +46,6 @@ export default class OnTypeFormatManager implements Disposable {
   }
 
   public async onCharacterType(character: string, document: TextDocument, position: Position, token: CancellationToken): Promise<TextEdit[] | null> {
-    if (isWord(character)) return
     let provider = this.getProvider(document, character)
     if (!provider) return
     let formatOpts = await workspace.getFormatOptions(document.uri)

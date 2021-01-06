@@ -1,14 +1,13 @@
-import { CancellationToken, Disposable, DocumentSelector, Position, SignatureHelp, TextDocument } from 'vscode-languageserver-protocol'
+import { CancellationToken, Disposable, DocumentSelector, Position, SignatureHelp, SignatureHelpContext } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { SignatureHelpProvider } from './index'
 import Manager, { ProviderItem } from './manager'
-import uuid = require('uuid/v4')
+import { v4 as uuid } from 'uuid'
 
 export default class SignatureManager extends Manager<SignatureHelpProvider> implements Disposable {
 
   public register(selector: DocumentSelector, provider: SignatureHelpProvider, triggerCharacters?: string[]): Disposable {
-    let characters = triggerCharacters.reduce((p, c) => {
-      return p.concat(c.split(/\s*/g))
-    }, [] as string[])
+    let characters = triggerCharacters.reduce((p, c) => p.concat(c.split(/\s*/g)), [] as string[])
     let item: ProviderItem<SignatureHelpProvider> = {
       id: uuid(),
       selector,
@@ -31,11 +30,12 @@ export default class SignatureManager extends Manager<SignatureHelpProvider> imp
   public async provideSignatureHelp(
     document: TextDocument,
     position: Position,
-    token: CancellationToken
+    token: CancellationToken,
+    context: SignatureHelpContext
   ): Promise<SignatureHelp | null> {
     let item = this.getProvider(document)
     if (!item) return null
-    let res = await Promise.resolve(item.provider.provideSignatureHelp(document, position, token))
+    let res = await Promise.resolve(item.provider.provideSignatureHelp(document, position, token, context))
     if (res && res.signatures && res.signatures.length) return res
     return null
   }

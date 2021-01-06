@@ -1,62 +1,112 @@
 import { http, https } from 'follow-redirects'
-import fs from 'fs'
-import { RequestOptions, ServerResponse } from 'http'
-import mkdirp from 'mkdirp'
+import { v1 as uuidv1 } from 'uuid'
+import fs, { Stats } from 'fs-extra'
 import path from 'path'
 import tar from 'tar'
-import { parse } from 'url'
 import { DownloadOptions } from '../types'
-import { getAgent } from './fetch'
+import { resolveRequestOptions } from './fetch'
+import { ServerResponse } from 'http'
+import contentDisposition from 'content-disposition'
+import { CancellationToken } from 'vscode-languageserver-protocol'
+import unzip from 'unzip-stream'
+const logger = require('../util/logger')('model-download')
 
 /**
- * Download and extract tgz from url
+ * Download file from url, with optional untar/unzip support.
  *
  * @param {string} url
  * @param {DownloadOptions} options contains dest folder and optional onProgress callback
  */
-export default function download(url: string, options: DownloadOptions): Promise<void> {
-  let { dest, onProgress } = options
+export default function download(url: string, options: DownloadOptions, token?: CancellationToken): Promise<string> {
+  let { dest, onProgress, extract } = options
   if (!dest || !path.isAbsolute(dest)) {
     throw new Error(`Expect absolute file path for dest option.`)
   }
-  if (!fs.existsSync(dest)) mkdirp.sync(dest)
-  let endpoint = parse(url)
+  let stat: Stats
+  try {
+    stat = fs.statSync(dest)
+  } catch (_e) {
+    fs.mkdirpSync(dest)
+  }
+  if (stat && !stat.isDirectory()) {
+    throw new Error(`${dest} exists, but not directory!`)
+  }
   let mod = url.startsWith('https') ? https : http
-  let agent = getAgent(endpoint)
-  let opts: RequestOptions = Object.assign({
-    method: 'GET',
-    hostname: endpoint.hostname,
-    port: endpoint.port ? parseInt(endpoint.port, 10) : (endpoint.protocol === 'https:' ? 443 : 80),
-    path: endpoint.path,
-    protocol: url.startsWith('https') ? 'https:' : 'http:',
-    agent,
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64)'
+  let opts = resolveRequestOptions(url, options)
+  let extname = path.extname(url)
+  return new Promise<string>((resolve, reject) => {
+    if (token) {
+      let disposable = token.onCancellationRequested(() => {
+        disposable.dispose()
+        req.destroy(new Error('request aborted'))
+      })
     }
-  }, options)
-  return new Promise<void>((resolve, reject) => {
     const req = mod.request(opts, (res: ServerResponse) => {
-      if (res.statusCode != 200) {
-        reject(new Error(`Invalid response from ${url}: ${res.statusCode}`))
-        return
-      }
-      if (onProgress) {
-        const len = parseInt((res as any).headers['content-length'], 10)
+      if ((res.statusCode >= 200 && res.statusCode < 300) || res.statusCode === 1223) {
+        let headers = (res as any).headers || {}
+        let dispositionHeader = headers['content-disposition']
+        if (!extname && dispositionHeader) {
+          let disposition = contentDisposition.parse(dispositionHeader)
+          if (disposition.parameters?.filename) {
+            extname = path.extname(disposition.parameters.filename)
+          }
+        }
+        if (extract === true) {
+          if (extname === '.zip' || headers['content-type'] == 'application/zip') {
+            extract = 'unzip'
+          } else if (extname == '.tgz') {
+            extract = 'untar'
+          } else {
+            reject(new Error(`Unable to extract for ${url}`))
+            return
+          }
+        }
+        let total = Number(headers['content-length'])
         let cur = 0
-        if (!isNaN(len)) {
+        if (!isNaN(total)) {
           res.on('data', chunk => {
             cur += chunk.length
-            onProgress(cur / len)
+            let percent = (cur / total * 100).toFixed(1)
+            if (onProgress) {
+              onProgress(percent)
+            } else {
+              logger.info(`Download ${url} progress ${percent}%`)
+            }
           })
         }
+        res.on('error', err => {
+          reject(new Error(`Unable to connect ${url}: ${err.message}`))
+        })
+        res.on('end', () => {
+          logger.info('Download completed:', url)
+        })
+        let stream: any
+        if (extract === 'untar') {
+          stream = res.pipe(tar.x({ strip: options.strip ?? 1, C: dest }))
+        } else if (extract === 'unzip') {
+          stream = res.pipe(unzip.Extract({ path: dest }))
+        } else {
+          dest = path.join(dest, `${uuidv1()}${extname}`)
+          stream = res.pipe(fs.createWriteStream(dest))
+        }
+        stream.on('finish', () => {
+          logger.info(`Downloaded ${url} => ${dest}`)
+          setTimeout(() => {
+            resolve(dest)
+          }, 100)
+        })
+        stream.on('error', reject)
+      } else {
+        reject(new Error(`Invalid response from ${url}: ${res.statusCode}`))
       }
-      let stream = res.pipe(tar.x({ strip: 1, C: dest }))
-      stream.on('finish', () => {
-        setTimeout(resolve, 100)
-      })
-      stream.on('error', reject)
     })
     req.on('error', reject)
+    req.on('timeout', () => {
+      req.destroy(new Error(`request timeout after ${options.timeout}ms`))
+    })
+    if (options.timeout) {
+      req.setTimeout(options.timeout)
+    }
     req.end()
   })
 }

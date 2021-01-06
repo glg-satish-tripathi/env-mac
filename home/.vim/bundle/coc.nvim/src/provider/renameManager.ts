@@ -1,7 +1,8 @@
-import { CancellationToken, Disposable, DocumentSelector, Position, Range, TextDocument, WorkspaceEdit } from 'vscode-languageserver-protocol'
+import { CancellationToken, Disposable, DocumentSelector, Position, Range, WorkspaceEdit } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { RenameProvider } from './index'
 import Manager from './manager'
-import uuid = require('uuid/v4')
+import { v4 as uuid } from 'uuid'
 
 export default class RenameManager extends Manager<RenameProvider> implements Disposable {
 
@@ -40,7 +41,7 @@ export default class RenameManager extends Manager<RenameProvider> implements Di
     if (provider.prepareRename == null) return null
     let res = await Promise.resolve(provider.prepareRename(document, position, token))
     // can not rename
-    if (res == null) false
+    if (res == null) return false
     return res
   }
 

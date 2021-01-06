@@ -3,20 +3,21 @@ import { CompleteOption, CompleteResult, VimCompleteItem } from '../types'
 import { fuzzyChar } from '../util/fuzzy'
 import { byteSlice } from '../util/string'
 import workspace from '../workspace'
+import window from '../window'
 import Source from './source'
 const logger = require('../util/logger')('model-source-vim')
 
 export default class VimSource extends Source {
 
   private async callOptinalFunc(fname: string, args: any[]): Promise<any> {
-    let exists = this.optionalFns.indexOf(fname) !== -1
+    let exists = this.optionalFns.includes(fname)
     if (!exists) return null
     let name = `coc#source#${this.name}#${fname}`
     let res
     try {
       res = await this.nvim.call(name, args)
     } catch (e) {
-      workspace.showMessage(`Vim error from source ${this.name}: ${e.message}`, 'error')
+      window.showMessage(`Vim error from source ${this.name}: ${e.message}`, 'error')
       return null
     }
     return res
@@ -25,7 +26,7 @@ export default class VimSource extends Source {
   public async shouldComplete(opt: CompleteOption): Promise<boolean> {
     let shouldRun = await super.shouldComplete(opt)
     if (!shouldRun) return false
-    if (this.optionalFns.indexOf('should_complete') === -1) return true
+    if (!this.optionalFns.includes('should_complete')) return true
     let res = await this.callOptinalFunc('should_complete', [opt])
     return !!res
   }
@@ -36,21 +37,21 @@ export default class VimSource extends Source {
 
   public async onCompleteDone(item: VimCompleteItem, opt: CompleteOption): Promise<void> {
     await super.onCompleteDone(item, opt)
-    if (this.optionalFns.indexOf('on_complete') === -1) return
-    this.callOptinalFunc('on_complete', [item]) // tslint:disable-line
+    if (!this.optionalFns.includes('on_complete')) return
+    await this.callOptinalFunc('on_complete', [item])
   }
 
   public onEnter(bufnr: number): void {
-    if (this.optionalFns.indexOf('on_enter') === -1) return
+    if (!this.optionalFns.includes('on_enter')) return
     let doc = workspace.getDocument(bufnr)
     if (!doc) return
     let { filetypes } = this
-    if (filetypes && filetypes.indexOf(doc.filetype) == -1) return
+    if (filetypes && !filetypes.includes(doc.filetype)) return
     this.callOptinalFunc('on_enter', [{
       bufnr,
       uri: doc.uri,
       languageId: doc.filetype
-    }]) // tslint:disable-line
+    }]).logError()
   }
 
   public async doComplete(opt: CompleteOption, token: CancellationToken): Promise<CompleteResult | null> {

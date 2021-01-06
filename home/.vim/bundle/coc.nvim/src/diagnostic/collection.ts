@@ -1,7 +1,8 @@
-import { Diagnostic, Emitter, Event } from 'vscode-languageserver-protocol'
+import { Diagnostic, Emitter, Event, Range } from 'vscode-languageserver-protocol'
 import { DiagnosticCollection } from '../types'
 import { URI } from 'vscode-uri'
 import { emptyRange } from '../util/position'
+import workspace from '../workspace'
 const logger = require('../util/logger')('diagnostic-collection')
 
 export default class Collection implements DiagnosticCollection {
@@ -19,49 +20,63 @@ export default class Collection implements DiagnosticCollection {
     this.name = owner
   }
 
-  public set(uri: string, diagnostics: Diagnostic[] | null): void
-  public set(entries: [string, Diagnostic[] | null][]): void
-  public set(entries: [string, Diagnostic[] | null][] | string, diagnostics?: Diagnostic[]): void {
-    if (Array.isArray(entries)) {
-      let map: Map<string, Diagnostic[]> = new Map()
+  public set(uri: string, diagnostics: Diagnostic[] | undefined): void
+  public set(entries: [string, Diagnostic[] | undefined][]): void
+  public set(entries: [string, Diagnostic[] | undefined][] | string, diagnostics?: Diagnostic[]): void {
+    let diagnosticsPerFile: Map<string, Diagnostic[]> = new Map()
+    if (!Array.isArray(entries)) {
+      let doc = workspace.getDocument(entries)
+      let uri = doc ? doc.uri : entries
+      diagnosticsPerFile.set(uri, diagnostics || [])
+    } else {
       for (let item of entries) {
-        let [file, diagnostics] = item
-        let exists = map.get(file) || []
-        if (diagnostics != null) {
-          for (let diagnostic of diagnostics) {
-            exists.push(diagnostic)
-          }
+        let [uri, diagnostics] = item
+        let doc = workspace.getDocument(uri)
+        uri = doc ? doc.uri : uri
+        if (diagnostics == null) {
+          // clear previous diagnostics if entry contains null
+          diagnostics = []
         } else {
-          exists = []
+          diagnostics = (diagnosticsPerFile.get(uri) || []).concat(diagnostics)
         }
-        map.set(file, exists)
+
+        diagnosticsPerFile.set(uri, diagnostics)
       }
-      for (let key of map.keys()) {
-        this.set(key, map.get(key))
-      }
-      return
     }
-    let uri = entries
-    uri = URI.parse(uri).toString()
-    if (diagnostics) {
+    for (let item of diagnosticsPerFile) {
+      let [uri, diagnostics] = item
+      uri = URI.parse(uri).toString()
       diagnostics.forEach(o => {
+        o.range = o.range || Range.create(0, 0, 1, 0)
+        o.message = o.message || 'Empty error message'
         if (emptyRange(o.range)) {
           o.range.end = {
             line: o.range.end.line,
             character: o.range.end.character + 1
           }
         }
+        let { start, end } = o.range
+        // fix empty diagnostic at the and of line
+        if (end.character == 0 && end.line - start.line == 1 && start.character > 0) {
+          // add last character when start character is end
+          let doc = workspace.getDocument(uri)
+          if (doc) {
+            let line = doc.getline(start.line)
+            if (start.character == line.length) {
+              o.range.start.character = start.character - 1
+            }
+          }
+        }
         o.source = o.source || this.name
       })
+      this.diagnosticsMap.set(uri, diagnostics)
+      this._onDidDiagnosticsChange.fire(uri)
     }
-    this.diagnosticsMap.set(uri, diagnostics || [])
-    this._onDidDiagnosticsChange.fire(uri)
     return
   }
 
   public delete(uri: string): void {
     this.diagnosticsMap.delete(uri)
-    this._onDidDiagnosticsChange.fire(uri)
   }
 
   public clear(): void {

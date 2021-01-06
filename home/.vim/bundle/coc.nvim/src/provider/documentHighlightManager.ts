@@ -1,7 +1,8 @@
-import { CancellationToken, Disposable, DocumentHighlight, DocumentSelector, Position, TextDocument } from 'vscode-languageserver-protocol'
+import { CancellationToken, Disposable, DocumentHighlight, DocumentSelector, Position } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { DocumentHighlightProvider } from './index'
 import Manager, { ProviderItem } from './manager'
-import uuid = require('uuid/v4')
+import { v4 as uuid } from 'uuid'
 
 export default class DocumentHighlightManager extends Manager<DocumentHighlightProvider> implements Disposable {
 

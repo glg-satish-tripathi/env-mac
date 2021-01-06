@@ -1,4 +1,4 @@
-/*tslint:disable*/
+/* eslint-disable */
 import helper from '../helper'
 // import * as assert from 'assert'
 import fs from 'fs'
@@ -34,7 +34,7 @@ describe('Client integration', () => {
       middleware: {
       }
     }
-    let client = new lsclient.LanguageClient('css', 'Test Language Server', { deferredOptions : () => [clientOptions, serverOptions] })
+    let client = new lsclient.LanguageClient('css', 'Test Language Server', serverOptions, clientOptions)
     let disposable = client.start()
 
     client.onReady().then(_ => {

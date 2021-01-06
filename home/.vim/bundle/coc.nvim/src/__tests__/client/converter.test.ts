@@ -1,4 +1,5 @@
-import { CompletionTriggerKind, Position, TextDocument, TextDocumentItem, TextDocumentSaveReason } from 'vscode-languageserver-protocol'
+import { CompletionTriggerKind, Position, TextDocumentItem, TextDocumentSaveReason } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { URI } from 'vscode-uri'
 import * as cv from '../../language-client/utils/converter'
 
@@ -30,7 +31,7 @@ describe('converter', () => {
   })
 
   it('should asWillSaveTextDocumentParams', () => {
-    let res = cv.asWillSaveTextDocumentParams({ document: createDocument(), reason: TextDocumentSaveReason.Manual })
+    let res = cv.asWillSaveTextDocumentParams({ document: createDocument(), reason: TextDocumentSaveReason.Manual, waitUntil: () => { } })
     expect(res.textDocument).toBeDefined()
     expect(res.reason).toBeDefined()
   })

@@ -1,7 +1,8 @@
-import { CancellationToken, Disposable, DocumentSelector, Location, Position, TextDocument } from 'vscode-languageserver-protocol'
+import { CancellationToken, Disposable, DocumentSelector, Location, Position } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { TypeDefinitionProvider } from './index'
 import Manager, { ProviderItem } from './manager'
-import uuid = require('uuid/v4')
+import { v4 as uuid } from 'uuid'
 
 export default class TypeDefinitionManager extends Manager<TypeDefinitionProvider> implements Disposable {
 

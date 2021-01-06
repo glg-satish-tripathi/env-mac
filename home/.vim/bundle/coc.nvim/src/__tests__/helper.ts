@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 import { Buffer, Neovim, Window } from '@chemzqm/neovim'
 import * as cp from 'child_process'
-import Emitter from 'events'
+import { EventEmitter } from 'events'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -9,7 +11,7 @@ import attach from '../attach'
 import Document from '../model/document'
 import Plugin from '../plugin'
 import workspace from '../workspace'
-import uuid = require('uuid/v4')
+import { v4 as uuid } from 'uuid'
 import { VimCompleteItem } from '../types'
 
 export interface CursorPosition {
@@ -20,10 +22,9 @@ export interface CursorPosition {
 
 process.on('uncaughtException', err => {
   let msg = 'Uncaught exception: ' + err.stack
-  // tslint:disable-next-line: no-console
   console.error(msg)
 })
-export class Helper extends Emitter {
+export class Helper extends EventEmitter {
   public nvim: Neovim
   public proc: cp.ChildProcess
   public plugin: Plugin
@@ -40,7 +41,7 @@ export class Helper extends Emitter {
     })
     let plugin = this.plugin = attach({ proc })
     this.nvim = plugin.nvim
-    this.nvim.uiAttach(80, 80, {}).catch(_e => {
+    this.nvim.uiAttach(160, 80, {}).catch(_e => {
       // noop
     })
     proc.on('exit', () => {
@@ -60,7 +61,7 @@ export class Helper extends Emitter {
   }
 
   public async shutdown(): Promise<void> {
-    await this.plugin.dispose()
+    this.plugin.dispose()
     await this.nvim.quit()
     if (this.proc) {
       this.proc.kill('SIGKILL')
@@ -80,7 +81,7 @@ export class Helper extends Emitter {
   public async waitFloat(): Promise<number> {
     for (let i = 0; i < 40; i++) {
       await this.wait(50)
-      let winid = await this.nvim.call('coc#util#get_float')
+      let winid = await this.nvim.call('coc#float#get_float_win')
       if (winid) return winid
     }
     throw new Error('timeout after 2s')
@@ -90,14 +91,18 @@ export class Helper extends Emitter {
     await this.nvim.call('nvim_select_popupmenu_item', [idx, true, true, {}])
   }
 
+  public async doAction(method: string, ...args: any[]): Promise<any> {
+    return await this.plugin.cocAction(method, ...args)
+  }
+
   public async reset(): Promise<void> {
-    let mode = await this.nvim.call('mode')
-    if (mode !== 'n') {
+    let mode = await this.nvim.mode
+    if (mode.mode != 'n' || mode.blocking) {
       await this.nvim.command('stopinsert')
       await this.nvim.call('feedkeys', [String.fromCharCode(27), 'in'])
     }
     await this.nvim.command('silent! %bwipeout!')
-    await this.wait(60)
+    await this.wait(80)
   }
 
   public async pumvisible(): Promise<boolean> {
@@ -145,8 +150,10 @@ export class Helper extends Emitter {
   }
 
   public async edit(file?: string): Promise<Buffer> {
-    file = path.join(__dirname, file ? file : `${uuid()}`)
-    let escaped = await this.nvim.call('fnameescape', file)
+    if (!file || !path.isAbsolute(file)) {
+      file = path.join(__dirname, file ? file : `${uuid()}`)
+    }
+    let escaped = await this.nvim.call('fnameescape', file) as string
     await this.nvim.command(`edit ${escaped}`)
     await this.wait(60)
     let bufnr = await this.nvim.call('bufnr', ['%']) as number
@@ -158,6 +165,10 @@ export class Helper extends Emitter {
     let doc = workspace.getDocument(buf.id)
     if (!doc) return await workspace.document
     return doc
+  }
+
+  public async getMarkers(bufnr: number, ns: number): Promise<[number, number, number][]> {
+    return await this.nvim.call('nvim_buf_get_extmarks', [bufnr, ns, 0, -1, {}]) as [number, number, number][]
   }
 
   public async getCmdline(): Promise<string> {
@@ -199,6 +210,10 @@ export class Helper extends Emitter {
     return res
   }
 
+  public async getWinLines(winid: number): Promise<string[]> {
+    return await this.nvim.eval(`getbufline(winbufnr(${winid}), 1, '$')`) as string[]
+  }
+
   public async getFloat(): Promise<Window> {
     let wins = await this.nvim.windows
     let floatWin: Window
@@ -207,6 +222,12 @@ export class Helper extends Emitter {
       if (f) floatWin = win
     }
     return floatWin
+  }
+
+  public async getFloats(): Promise<Window[]> {
+    let ids = await this.nvim.call('coc#float#get_float_win_list', [])
+    if (!ids) return []
+    return ids.map(id => this.nvim.createWindow(id))
   }
 }
 

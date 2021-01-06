@@ -1,4 +1,4 @@
-/*tslint:disable*/
+/* eslint-disable */
 import assert from 'assert'
 import { Delayer } from '../../language-client/utils/async'
 
@@ -13,17 +13,19 @@ test('Delayer', () => {
 
   assert(!delayer.isTriggered())
 
-  promises.push(delayer.trigger(factory).then((result) => { assert.equal(result, 1); assert(!delayer.isTriggered()); }))
+  promises.push(delayer.trigger(factory).then((result) => { assert.equal(result, 1); assert(!delayer.isTriggered()) }))
   assert(delayer.isTriggered())
 
-  promises.push(delayer.trigger(factory).then((result) => { assert.equal(result, 1); assert(!delayer.isTriggered()); }))
+  promises.push(delayer.trigger(factory).then((result) => { assert.equal(result, 1); assert(!delayer.isTriggered()) }))
   assert(delayer.isTriggered())
 
-  promises.push(delayer.trigger(factory).then((result) => { assert.equal(result, 1); assert(!delayer.isTriggered()); }))
+  promises.push(delayer.trigger(factory).then((result) => { assert.equal(result, 1); assert(!delayer.isTriggered()) }))
   assert(delayer.isTriggered())
 
   return Promise.all(promises).then(() => {
     assert(!delayer.isTriggered())
+  }).finally(() => {
+    delayer.dispose()
   })
 })
 
@@ -48,7 +50,7 @@ test('Delayer - simple cancel', async () => {
   await p
 })
 
-test('Delayer - cancel should cancel all calls to trigger', function () {
+test('Delayer - cancel should cancel all calls to trigger', function() {
   let count = 0
   let factory = () => {
     return Promise.resolve(++count)
@@ -59,13 +61,13 @@ test('Delayer - cancel should cancel all calls to trigger', function () {
 
   assert(!delayer.isTriggered())
 
-  promises.push(delayer.trigger(factory).then(null, () => { assert(true, 'yes, it was cancelled'); }))
+  promises.push(delayer.trigger(factory).then(null, () => { assert(true, 'yes, it was cancelled') }))
   assert(delayer.isTriggered())
 
-  promises.push(delayer.trigger(factory).then(null, () => { assert(true, 'yes, it was cancelled'); }))
+  promises.push(delayer.trigger(factory).then(null, () => { assert(true, 'yes, it was cancelled') }))
   assert(delayer.isTriggered())
 
-  promises.push(delayer.trigger(factory).then(null, () => { assert(true, 'yes, it was cancelled'); }))
+  promises.push(delayer.trigger(factory).then(null, () => { assert(true, 'yes, it was cancelled') }))
   assert(delayer.isTriggered())
 
   delayer.cancel()
@@ -75,7 +77,7 @@ test('Delayer - cancel should cancel all calls to trigger', function () {
   })
 })
 
-test('Delayer - trigger, cancel, then trigger again', function () {
+test('Delayer - trigger, cancel, then trigger again', function() {
   let count = 0
   let factory = () => {
     return Promise.resolve(++count)
@@ -90,10 +92,10 @@ test('Delayer - trigger, cancel, then trigger again', function () {
     assert.equal(result, 1)
     assert(!delayer.isTriggered())
 
-    promises.push(delayer.trigger(factory).then(null, () => { assert(true, 'yes, it was cancelled'); }))
+    promises.push(delayer.trigger(factory).then(null, () => { assert(true, 'yes, it was cancelled') }))
     assert(delayer.isTriggered())
 
-    promises.push(delayer.trigger(factory).then(null, () => { assert(true, 'yes, it was cancelled'); }))
+    promises.push(delayer.trigger(factory).then(null, () => { assert(true, 'yes, it was cancelled') }))
     assert(delayer.isTriggered())
 
     delayer.cancel()
@@ -103,10 +105,10 @@ test('Delayer - trigger, cancel, then trigger again', function () {
 
       assert(!delayer.isTriggered())
 
-      promises.push(delayer.trigger(factory).then(() => { assert.equal(result, 1); assert(!delayer.isTriggered()); }))
+      promises.push(delayer.trigger(factory).then(() => { assert.equal(result, 1); assert(!delayer.isTriggered()) }))
       assert(delayer.isTriggered())
 
-      promises.push(delayer.trigger(factory).then(() => { assert.equal(result, 1); assert(!delayer.isTriggered()); }))
+      promises.push(delayer.trigger(factory).then(() => { assert.equal(result, 1); assert(!delayer.isTriggered()) }))
       assert(delayer.isTriggered())
 
       const p = Promise.all(promises).then(() => {
@@ -126,7 +128,7 @@ test('Delayer - trigger, cancel, then trigger again', function () {
   return p
 })
 
-test('Delayer - last task should be the one getting called', function () {
+test('Delayer - last task should be the one getting called', function() {
   let factoryFactory = (n: number) => () => {
     return Promise.resolve(n)
   }
@@ -136,9 +138,9 @@ test('Delayer - last task should be the one getting called', function () {
 
   assert(!delayer.isTriggered())
 
-  promises.push(delayer.trigger(factoryFactory(1)).then((n) => { assert.equal(n, 3); }))
-  promises.push(delayer.trigger(factoryFactory(2)).then((n) => { assert.equal(n, 3); }))
-  promises.push(delayer.trigger(factoryFactory(3)).then((n) => { assert.equal(n, 3); }))
+  promises.push(delayer.trigger(factoryFactory(1)).then((n) => { assert.equal(n, 3) }))
+  promises.push(delayer.trigger(factoryFactory(2)).then((n) => { assert.equal(n, 3) }))
+  promises.push(delayer.trigger(factoryFactory(3)).then((n) => { assert.equal(n, 3) }))
 
   const p = Promise.all(promises).then(() => {
     assert(!delayer.isTriggered())

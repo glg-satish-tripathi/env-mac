@@ -1,12 +1,15 @@
 import { Neovim } from '@chemzqm/neovim'
+import fs from 'fs-extra'
 import os from 'os'
 import path from 'path'
+import { URI } from 'vscode-uri'
 import extensions from '../../extensions'
 import { ListContext, ListItem } from '../../types'
 import { wait } from '../../util'
-import { readdirAsync } from '../../util/fs'
-import BasicList from '../basic'
 import workspace from '../../workspace'
+import window from '../../window'
+import BasicList from '../basic'
+import { formatListItems, UnformattedListItem } from '../formatting'
 const logger = require('../../util/logger')('list-extensions')
 
 export default class ExtensionList extends BasicList {
@@ -20,12 +23,31 @@ export default class ExtensionList extends BasicList {
       let { id, state } = item.data
       if (state == 'disabled') return
       if (state == 'activated') {
-        extensions.deactivate(id)
+        await extensions.deactivate(id)
       } else {
-        extensions.activate(id)
+        await extensions.activate(id)
       }
       await wait(100)
     }, { persist: true, reload: true, parallel: true })
+
+    this.addAction('configuration', async item => {
+      let { root } = item.data
+      let jsonFile = path.join(root, 'package.json')
+      if (fs.existsSync(jsonFile)) {
+        let lines = fs.readFileSync(jsonFile, 'utf8').split(/\r?\n/)
+        let idx = lines.findIndex(s => s.includes('"contributes"'))
+        await workspace.jumpTo(URI.file(jsonFile).toString(), { line: idx == -1 ? 0 : idx, character: 0 })
+      }
+    })
+
+    this.addAction('open', async item => {
+      let { root } = item.data
+      if (workspace.env.isiTerm) {
+        nvim.call('coc#util#iterm_open', [root], true)
+      } else {
+        nvim.call('coc#util#open_url', [root], true)
+      }
+    })
 
     this.addAction('disable', async item => {
       let { id, state } = item.data
@@ -42,9 +64,9 @@ export default class ExtensionList extends BasicList {
       await extensions.toggleLock(id)
     }, { persist: true, reload: true })
 
-    this.addAction('doc', async item => {
+    this.addAction('help', async item => {
       let { root } = item.data
-      let files = await readdirAsync(root)
+      let files = await fs.readdir(root)
       let file = files.find(f => /^readme/i.test(f))
       if (file) {
         let escaped = await nvim.call('fnameescape', [path.join(root, file)])
@@ -53,14 +75,30 @@ export default class ExtensionList extends BasicList {
     })
 
     this.addAction('reload', async item => {
-      let { id, state } = item.data
-      if (state == 'disabled') return
-      if (state == 'activated') {
-        extensions.deactivate(id)
-      }
-      extensions.activate(id)
-      await wait(100)
+      let { id } = item.data
+      await extensions.reloadExtension(id)
     }, { persist: true, reload: true })
+
+    this.addAction('fix', async item => {
+      let { root, isLocal } = item.data
+      let { npm } = extensions
+      if (isLocal) {
+        window.showMessage(`Can't fix for local extension.`, 'warning')
+        return
+      }
+      if (!npm) return
+      let folder = path.join(root, 'node_modules')
+      if (fs.existsSync(folder)) {
+        fs.removeSync(folder)
+      }
+      let terminal = await workspace.createTerminal({
+        cwd: root
+      })
+      let shown = await terminal.show(false)
+      if (!shown) return
+      workspace.nvim.command(`startinsert`, true)
+      terminal.sendText(`${npm} install --production --ignore-scripts --no-lockfile`, true)
+    })
 
     this.addMultipleAction('uninstall', async items => {
       let ids = []
@@ -75,7 +113,7 @@ export default class ExtensionList extends BasicList {
   }
 
   public async loadItems(_context: ListContext): Promise<ListItem[]> {
-    let items: ListItem[] = []
+    let items: UnformattedListItem[] = []
     let list = await extensions.getExtensionStates()
     let lockedList = await extensions.getLockedList()
     for (let stat of list) {
@@ -88,9 +126,9 @@ export default class ExtensionList extends BasicList {
         prefix = '?'
       }
       let root = await this.nvim.call('resolve', stat.root)
-      let locked = lockedList.indexOf(stat.id) !== -1
+      let locked = lockedList.includes(stat.id)
       items.push({
-        label: `${prefix} ${stat.id}${locked ? ' ' : ''}\t${stat.isLocal ? '[RTP]\t' : ''}${stat.version}\t${root.replace(os.homedir(), '~')}`,
+        label: [`${prefix} ${stat.id}${locked ? ' ' : ''}`, ...(stat.isLocal ? ['[RTP]'] : []), stat.version, root.replace(os.homedir(), '~')],
         filterText: stat.id,
         data: {
           id: stat.id,
@@ -107,7 +145,7 @@ export default class ExtensionList extends BasicList {
       }
       return b.data.id - a.data.id ? 1 : -1
     })
-    return items
+    return formatListItems(this.alignColumns, items)
   }
 
   public doHighlight(): void {

@@ -1,7 +1,8 @@
-import { CancellationToken, Disposable, DocumentSelector, FoldingRange, TextDocument } from 'vscode-languageserver-protocol'
+import { CancellationToken, Disposable, DocumentSelector, FoldingRange } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { FoldingContext, FoldingRangeProvider } from './index'
 import Manager, { ProviderItem } from './manager'
-import uuid = require('uuid/v4')
+import { v4 as uuid } from 'uuid'
 
 export default class FoldingRangeManager extends Manager<FoldingRangeProvider> implements Disposable {
 

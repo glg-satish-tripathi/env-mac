@@ -1,7 +1,8 @@
-import { CancellationToken, ColorInformation, ColorPresentation, Disposable, DocumentSelector, TextDocument } from 'vscode-languageserver-protocol'
+import { CancellationToken, ColorInformation, ColorPresentation, Disposable, DocumentSelector } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { DocumentColorProvider } from './index'
 import Manager, { ProviderItem } from './manager'
-import uuid = require('uuid/v4')
+import { v4 as uuid } from 'uuid'
 
 export default class DocumentColorManager extends Manager<DocumentColorProvider> implements Disposable {
 

@@ -1,10 +1,11 @@
-/*---------------------------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import { CharCode } from '../util/charCode'
-import { Range, TextDocument } from 'vscode-languageserver-protocol'
+import { Range } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 const logger = require('../util/logger')('snippets-parser')
 
 export const enum TokenType {
@@ -174,7 +175,9 @@ export abstract class Marker {
   }
 
   public get snippet(): TextmateSnippet | undefined {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let candidate: Marker = this
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (!candidate) {
         return undefined
@@ -271,7 +274,7 @@ export class Placeholder extends TransformableMarker {
       transformString = this.transform.toTextmateString()
     }
     if (this.children.length === 0 && !this.transform) {
-      return `\$${this.index}`
+      return `$${this.index}`
     } else if (this.children.length === 0) {
       return `\${${this.index}${transformString}}`
     } else if (this.choice) {
@@ -332,7 +335,7 @@ export class Transform extends Marker {
 
   public resolve(value: string): string {
     let didMatch = false
-    let ret = value.replace(this.regexp, (...args) => { // tslint:disable-line
+    let ret = value.replace(this.regexp, (...args) => {
       didMatch = true
       return this._replace(args.slice(0, -2))
     })
@@ -378,10 +381,10 @@ export class Transform extends Marker {
 export class FormatString extends Marker {
 
   constructor(
-    readonly index: number,
-    readonly shorthandName?: string,
-    readonly ifValue?: string,
-    readonly elseValue?: string,
+    public readonly index: number,
+    public readonly shorthandName?: string,
+    public readonly ifValue?: string,
+    public readonly elseValue?: string,
   ) {
     super()
   }
@@ -397,7 +400,7 @@ export class FormatString extends Marker {
       return !value ? '' : this._toPascalCase(value)
     } else if (Boolean(value) && typeof this.ifValue === 'string') {
       return this.ifValue
-    } else if (!Boolean(value) && typeof this.elseValue === 'string') {
+    } else if (!value && typeof this.elseValue === 'string') {
       return this.elseValue
     } else {
       return value || ''
@@ -409,10 +412,8 @@ export class FormatString extends Marker {
     if (!match) {
       return value
     }
-    return match.map(word => {
-      return word.charAt(0).toUpperCase()
-        + word.substr(1).toLowerCase()
-    })
+    return match.map(word => word.charAt(0).toUpperCase()
+      + word.substr(1).toLowerCase())
       .join('')
   }
 
@@ -445,22 +446,28 @@ export class Variable extends TransformableMarker {
     super()
   }
 
-  public resolve(resolver: VariableResolver): boolean {
-    let value = resolver.resolve(this)
-    if (value && value.indexOf('\n') !== -1) {
-      // get indent of previous Text child
-      let { children } = this.parent
-      let idx = children.indexOf(this)
-      let previous = children[idx - 1]
-      if (previous && previous instanceof Text) {
-        let ms = previous.value.match(/\n([ \t]*)$/)
-        if (ms) {
-          let newLines = value.split('\n').map((s, i) => {
-            return i == 0 ? s : ms[1] + s.replace(/^\s*/, '')
-          })
-          value = newLines.join('\n')
+  public async resolve(resolver: VariableResolver): Promise<boolean> {
+    let value = await resolver.resolve(this)
+    if (value && value.includes('\n')) {
+      // get indent from previous texts
+      let indent = ''
+      this.snippet.walk(m => {
+        if (m == this) {
+          return false
         }
-      }
+        if (m instanceof Text) {
+          let lines = m.toString().split(/\r?\n/)
+          indent = lines[lines.length - 1].match(/^\s*/)[0]
+        }
+        return true
+      })
+      let lines = value.split('\n')
+      let indents = lines.filter(s => s.length > 0).map(s => s.match(/^\s*/)[0])
+      let minIndent = indents.length == 0 ? '' :
+        indents.reduce((p, c) => p.length < c.length ? p : c)
+      let newLines = lines.map((s, i) => i == 0 || s.length == 0 || !s.startsWith(minIndent) ? s :
+        indent + s.slice(minIndent.length))
+      value = newLines.join('\n')
     }
     if (this.transform) {
       value = this.transform.resolve(value || '')
@@ -495,13 +502,13 @@ export class Variable extends TransformableMarker {
 }
 
 export interface VariableResolver {
-  resolve(variable: Variable): string | undefined
+  resolve(variable: Variable): Promise<string | undefined>
 }
 
 function walk(marker: Marker[], visitor: (marker: Marker) => boolean): void {
   const stack = [...marker]
   while (stack.length > 0) {
-    const marker = stack.shift()!
+    const marker = stack.shift()
     const recurse = visitor(marker)
     if (!recurse) {
       break
@@ -512,10 +519,12 @@ function walk(marker: Marker[], visitor: (marker: Marker) => boolean): void {
 
 export class TextmateSnippet extends Marker {
 
-  private _placeholders?: { all: Placeholder[], last?: Placeholder }
+  private _placeholders?: { all: Placeholder[]; last?: Placeholder }
+  private _variables?: Variable[]
 
-  public get placeholderInfo(): { all: Placeholder[], last?: Placeholder } {
+  public get placeholderInfo(): { all: Placeholder[]; last?: Placeholder } {
     if (!this._placeholders) {
+      this._variables = []
       // fill in placeholders
       let all: Placeholder[] = []
       let last: Placeholder | undefined
@@ -523,12 +532,22 @@ export class TextmateSnippet extends Marker {
         if (candidate instanceof Placeholder) {
           all.push(candidate)
           last = !last || last.index < candidate.index ? candidate : last
+        } else if (candidate instanceof Variable) {
+          let first = candidate.name.charCodeAt(0)
+          // not jumpover for uppercase variable.
+          if (first < 65 || first > 90) {
+            this._variables.push(candidate)
+          }
         }
         return true
       })
       this._placeholders = { all, last }
     }
     return this._placeholders
+  }
+
+  public get variables(): Variable[] {
+    return this._variables
   }
 
   public get placeholders(): Placeholder[] {
@@ -538,9 +557,7 @@ export class TextmateSnippet extends Marker {
 
   public get maxIndexNumber(): number {
     let { placeholders } = this
-    return placeholders.reduce((curr, p) => {
-      return Math.max(curr, p.index)
-    }, 0)
+    return placeholders.reduce((curr, p) => Math.max(curr, p.index), 0)
   }
 
   public get minIndexNumber(): number {
@@ -556,25 +573,26 @@ export class TextmateSnippet extends Marker {
     if (!placeholder) return
     let { index } = placeholder
     const document = TextDocument.create('untitled:/1', 'snippet', 0, placeholder.toString())
-    snippet = TextDocument.applyEdits(document, [{ range, newText: snippet.replace(/\$0$/, '') }])
-    let nested = new SnippetParser().parse(snippet, false)
-    let maxIndexAdded = nested.maxIndexNumber
-    let totalAdd = maxIndexAdded + - 1
+    snippet = TextDocument.applyEdits(document, [{ range, newText: snippet }])
+    let nested = new SnippetParser().parse(snippet, true)
+    let maxIndexAdded = nested.maxIndexNumber + 1
+    let indexes: number[] = []
     for (let p of nested.placeholders) {
       if (p.isFinalTabstop) {
-        p.index = maxIndexAdded + index + 1
+        p.index = maxIndexAdded + index
       } else {
         p.index = p.index + index
       }
+      indexes.push(p.index)
     }
     this.walk(m => {
       if (m instanceof Placeholder && m.index > index) {
-        m.index = m.index + totalAdd + 1
+        m.index = m.index + maxIndexAdded
       }
       return true
     })
     this.replace(placeholder, nested.children)
-    return index + 1
+    return Math.min.apply(null, indexes)
   }
 
   public updatePlaceholder(id: number, val: string): void {
@@ -591,6 +609,17 @@ export class TextmateSnippet extends Marker {
       }
     }
     this._placeholders = undefined
+  }
+
+  public updateVariable(id: number, val: string): void {
+    const find = this.variables[id - this.maxIndexNumber - 1]
+    if (find) {
+      let variables = this.variables.filter(o => o.name == find.name)
+      for (let variable of variables) {
+        let newText = variable.transform ? variable.transform.resolve(val) : val
+        variable.setOnlyChild(new Text(newText))
+      }
+    }
   }
 
   /**
@@ -641,16 +670,15 @@ export class TextmateSnippet extends Marker {
     return ret
   }
 
-  public resolveVariables(resolver: VariableResolver): this {
+  public async resolveVariables(resolver: VariableResolver): Promise<void> {
+    let items: Variable[] = []
     this.walk(candidate => {
       if (candidate instanceof Variable) {
-        if (candidate.resolve(resolver)) {
-          this._placeholders = undefined
-        }
+        items.push(candidate)
       }
       return true
     })
-    return this
+    await Promise.all(items.map(o => o.resolve(resolver)))
   }
 
   public appendChild(child: Marker): this {
@@ -794,7 +822,8 @@ export class SnippetParser {
   // \$, \\, \} -> just text
   private _parseEscaped(marker: Marker): boolean {
     let value: string
-    if (value = this._accept(TokenType.Backslash, true)) { // tslint:disable-line
+    // eslint-disable-next-line no-cond-assign
+    if (value = this._accept(TokenType.Backslash, true)) {
       // saw a backslash, append escaped token or that backslash
       value = this._accept(TokenType.Dollar, true)
         || this._accept(TokenType.CurlyClose, true)
@@ -818,9 +847,9 @@ export class SnippetParser {
       return this._backTo(token)
     }
 
-    parent.appendChild(/^\d+$/.test(value!)
-      ? new Placeholder(Number(value!))
-      : new Variable(value!)
+    parent.appendChild(/^\d+$/.test(value)
+      ? new Placeholder(Number(value))
+      : new Variable(value)
     )
     return true
   }
@@ -837,10 +866,11 @@ export class SnippetParser {
       return this._backTo(token)
     }
 
-    const placeholder = new Placeholder(Number(index!))
+    const placeholder = new Placeholder(Number(index))
 
     if (this._accept(TokenType.Colon)) {
       // ${1:<children>}
+      // eslint-disable-next-line no-constant-condition
       while (true) {
 
         // ...} -> done
@@ -854,7 +884,7 @@ export class SnippetParser {
         }
 
         // fallback
-        parent.appendChild(new Text('${' + index! + ':'))
+        parent.appendChild(new Text('${' + index + ':'))
         placeholder.children.forEach(parent.appendChild, parent)
         return true
       }
@@ -862,6 +892,7 @@ export class SnippetParser {
       // ${1|one,two,three|}
       const choice = new Choice()
 
+      // eslint-disable-next-line no-constant-condition
       while (true) {
         if (this._parseChoiceElement(choice)) {
 
@@ -909,12 +940,14 @@ export class SnippetParser {
     const token = this._token
     const values: string[] = []
 
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (this._token.type === TokenType.Comma || this._token.type === TokenType.Pipe) {
         break
       }
       let value: string
-      if (value = this._accept(TokenType.Backslash, true)) { // tslint:disable-line
+      // eslint-disable-next-line no-cond-assign
+      if (value = this._accept(TokenType.Backslash, true)) {
         // \, \|, or \\
         value = this._accept(TokenType.Comma, true)
           || this._accept(TokenType.Pipe, true)
@@ -952,10 +985,10 @@ export class SnippetParser {
       return this._backTo(token)
     }
 
-    const variable = new Variable(name!)
-
+    const variable = new Variable(name)
     if (this._accept(TokenType.Colon)) {
       // ${foo:<children>}
+      // eslint-disable-next-line no-constant-condition
       while (true) {
 
         // ...} -> done
@@ -969,7 +1002,7 @@ export class SnippetParser {
         }
 
         // fallback
-        parent.appendChild(new Text('${' + name! + ':'))
+        parent.appendChild(new Text('${' + name + ':'))
         variable.children.forEach(parent.appendChild, parent)
         return true
       }
@@ -1003,13 +1036,15 @@ export class SnippetParser {
     let regexOptions = ''
 
     // (1) /regex
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (this._accept(TokenType.Forwardslash)) {
         break
       }
 
       let escaped: string
-      if (escaped = this._accept(TokenType.Backslash, true)) { // tslint:disable-line
+      // eslint-disable-next-line no-cond-assign
+      if (escaped = this._accept(TokenType.Backslash, true)) {
         escaped = this._accept(TokenType.Forwardslash, true) || escaped
         regexValue += escaped
         continue
@@ -1023,25 +1058,31 @@ export class SnippetParser {
     }
 
     // (2) /format
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (this._accept(TokenType.Forwardslash)) {
         break
       }
 
       let escaped: string
-      if (escaped = this._accept(TokenType.Backslash, true)) { // tslint:disable-line
+      // eslint-disable-next-line no-cond-assign
+      if (escaped = this._accept(TokenType.Backslash, true)) {
         escaped = this._accept(TokenType.Forwardslash, true) || escaped
         transform.appendChild(new Text(escaped))
         continue
       }
-
       if (this._parseFormatString(transform) || this._parseAnything(transform)) {
+        let text = transform.children[0] as Text
+        if (text && text.value && text.value.includes('\\n')) {
+          text.value = text.value.replace(/\\n/g, '\n')
+        }
         continue
       }
       return false
     }
 
     // (3) /option
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (this._accept(TokenType.CurlyClose)) {
         break
@@ -1150,7 +1191,8 @@ export class SnippetParser {
 
   private _parseAnything(marker: Marker): boolean {
     if (this._token.type !== TokenType.EOF) {
-      marker.appendChild(new Text(this._scanner.tokenText(this._token)))
+      let text = this._scanner.tokenText(this._token)
+      marker.appendChild(new Text(text))
       this._accept(undefined)
       return true
     }

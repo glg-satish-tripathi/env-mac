@@ -1,4 +1,5 @@
-import { SelectionRange, CancellationToken, CodeAction, CodeActionContext, CodeActionKind, CodeLens, Color, ColorInformation, ColorPresentation, Command, CompletionContext, CompletionItem, CompletionList, Definition, DocumentHighlight, DocumentLink, DocumentSymbol, FoldingRange, FormattingOptions, Hover, Location, Position, Range, SignatureHelp, SymbolInformation, TextDocument, TextEdit, WorkspaceEdit, Event, DefinitionLink } from 'vscode-languageserver-protocol'
+import { CancellationToken, CodeAction, CodeActionContext, CodeActionKind, CodeLens, Color, ColorInformation, ColorPresentation, Command, CompletionContext, CompletionItem, CompletionList, Definition, DefinitionLink, DocumentHighlight, DocumentLink, DocumentSymbol, Event, FoldingRange, FormattingOptions, Hover, Location, Position, Range, SelectionRange, SignatureHelp, SignatureHelpContext, SymbolInformation, TextEdit, WorkspaceEdit } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { URI } from 'vscode-uri'
 
 /**
@@ -128,7 +129,7 @@ export interface DefinitionProvider {
     document: TextDocument,
     position: Position,
     token: CancellationToken
-  ): ProviderResult<Definition>
+  ): ProviderResult<Definition | DefinitionLink[]>
 }
 
 /**
@@ -160,7 +161,8 @@ export interface SignatureHelpProvider {
   provideSignatureHelp(
     document: TextDocument,
     position: Position,
-    token: CancellationToken
+    token: CancellationToken,
+    context: SignatureHelpContext
   ): ProviderResult<SignatureHelp>
 }
 
@@ -182,7 +184,7 @@ export interface TypeDefinitionProvider {
     document: TextDocument,
     position: Position,
     token: CancellationToken
-  ): ProviderResult<Definition>
+  ): ProviderResult<Definition | DefinitionLink[]>
 }
 
 /**
@@ -232,6 +234,7 @@ export interface FoldingRangeProvider {
   /**
    * Returns a list of folding ranges or null and undefined if the provider
    * does not want to participate or was cancelled.
+   *
    * @param document The document in which the command was invoked.
    * @param context Additional context information (for future use)
    * @param token A cancellation token.
@@ -280,7 +283,7 @@ export interface ImplementationProvider {
     document: TextDocument,
     position: Position,
     token: CancellationToken
-  ): ProviderResult<Definition>
+  ): ProviderResult<Definition | DefinitionLink[]>
 }
 
 /**
@@ -421,7 +424,7 @@ export interface DocumentRangeFormattingEditProvider {
  *
  * A code action can be any command that is [known](#commands.getCommands) to the system.
  */
-export interface CodeActionProvider {
+export interface CodeActionProvider<T extends CodeAction = CodeAction> {
   /**
    * Provide commands for the given document and range.
    *
@@ -439,6 +442,18 @@ export interface CodeActionProvider {
     context: CodeActionContext,
     token: CancellationToken
   ): ProviderResult<(Command | CodeAction)[]>
+
+  /**
+   * Given a code action fill in its [`edit`](#CodeAction.edit)-property. Changes to
+   * all other properties, like title, are ignored. A code action that has an edit
+   * will not be resolved.
+   *
+   * @param codeAction A code action.
+   * @param token A cancellation token.
+   * @return The resolved code action or a thenable that resolves to such. It is OK to return the given
+   * `item`. When no result is returned, the given `item` will be used.
+   */
+  resolveCodeAction?(codeAction: T, token: CancellationToken): ProviderResult<T>
 }
 
 /**
@@ -584,7 +599,7 @@ export interface DocumentColorProvider {
    * @return An array of color presentations or a thenable that resolves to such. The lack of a result
    * can be signaled by returning `undefined`, `null`, or an empty array.
    */
-  provideColorPresentations(color: Color, context: { document: TextDocument, range: Range }, token: CancellationToken): ProviderResult<ColorPresentation[]>
+  provideColorPresentations(color: Color, context: { document: TextDocument; range: Range }, token: CancellationToken): ProviderResult<ColorPresentation[]>
 }
 
 export interface TextDocumentContentProvider {

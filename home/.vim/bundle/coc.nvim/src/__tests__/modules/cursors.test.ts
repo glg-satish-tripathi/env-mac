@@ -6,10 +6,12 @@ import helper from '../helper'
 
 let nvim: Neovim
 let cursors: Cursors
+let ns: number
 
 beforeAll(async () => {
   await helper.setup()
   nvim = helper.nvim
+  ns = await nvim.createNamespace('coc-cursors')
   cursors = new Cursors(nvim)
 })
 
@@ -19,13 +21,15 @@ afterAll(async () => {
 
 afterEach(async () => {
   nvim.pauseNotification()
-  cursors.cancel()
+  cursors.reset()
   await nvim.resumeNotification()
   await helper.reset()
 })
 
-function rangeCount(): number {
-  return (cursors as any).ranges.length
+async function rangeCount(): Promise<number> {
+  let buf = await nvim.buffer
+  let markers = await helper.getMarkers(buf.id, ns)
+  return markers.length
 }
 
 describe('cursors#select', () => {
@@ -34,19 +38,20 @@ describe('cursors#select', () => {
     let doc = await helper.createDocument()
     await nvim.call('setline', [1, ['a', 'b']])
     await nvim.call('cursor', [1, 1])
-    await helper.wait(30)
+    await helper.wait(100)
     doc.forceSync()
+    await helper.wait(100)
     await cursors.select(doc.bufnr, 'position', 'n')
     await helper.wait(30)
-    let n = rangeCount()
+    let n = await rangeCount()
     expect(n).toBe(1)
     await nvim.setOption('virtualedit', 'onemore')
     await nvim.call('cursor', [2, 2])
     await cursors.select(doc.bufnr, 'position', 'n')
-    n = rangeCount()
+    n = await rangeCount()
     expect(n).toBe(2)
     await cursors.select(doc.bufnr, 'position', 'n')
-    n = rangeCount()
+    n = await rangeCount()
     expect(n).toBe(1)
   })
 
@@ -57,14 +62,14 @@ describe('cursors#select', () => {
     await helper.wait(30)
     doc.forceSync()
     await cursors.select(doc.bufnr, 'word', 'n')
-    let n = rangeCount()
+    let n = await rangeCount()
     expect(n).toBe(1)
     await nvim.call('cursor', [2, 2])
     await cursors.select(doc.bufnr, 'word', 'n')
-    n = rangeCount()
+    n = await rangeCount()
     expect(n).toBe(2)
     await cursors.select(doc.bufnr, 'word', 'n')
-    n = rangeCount()
+    n = await rangeCount()
     expect(n).toBe(1)
   })
 
@@ -76,13 +81,13 @@ describe('cursors#select', () => {
     await helper.wait(30)
     doc.forceSync()
     await cursors.select(doc.bufnr, 'word', 'n')
-    let n = rangeCount()
+    let n = await rangeCount()
     expect(n).toBe(1)
     await nvim.call('cursor', [2, 1])
     await helper.wait(30)
     doc.forceSync()
     await cursors.select(doc.bufnr, 'word', 'n')
-    n = rangeCount()
+    n = await rangeCount()
     expect(n).toBe(2)
   })
 
@@ -94,15 +99,15 @@ describe('cursors#select', () => {
     await helper.wait(30)
     doc.forceSync()
     await cursors.select(doc.bufnr, 'range', 'v')
-    let n = rangeCount()
+    let n = await rangeCount()
     expect(n).toBe(1)
     await nvim.call('cursor', [2, 1])
     await nvim.command('normal! vE')
     await cursors.select(doc.bufnr, 'range', 'v')
-    n = rangeCount()
+    n = await rangeCount()
     expect(n).toBe(2)
     await cursors.select(doc.bufnr, 'range', 'v')
-    n = rangeCount()
+    n = await rangeCount()
     expect(n).toBe(1)
   })
 
@@ -134,7 +139,7 @@ describe('cursors#addRanges', () => {
       Range.create(1, 4, 1, 7)
     ]
     await cursors.addRanges(ranges)
-    let n = rangeCount()
+    let n = await rangeCount()
     expect(n).toBe(5)
   })
 })
@@ -163,7 +168,7 @@ describe('cursors#onchange', () => {
     await doc.buffer.append(['append'])
     doc.forceSync()
     await helper.wait(50)
-    let n = rangeCount()
+    let n = await rangeCount()
     expect(n).toBe(5)
   })
 
@@ -171,8 +176,8 @@ describe('cursors#onchange', () => {
     let doc = await setup()
     await doc.buffer.setLines(['prepend'], { start: 0, end: 0, strictIndexing: false })
     doc.forceSync()
-    await helper.wait(100)
-    let n = rangeCount()
+    await helper.wait(200)
+    let n = await rangeCount()
     expect(n).toBe(5)
     await nvim.call('cursor', [2, 1])
     await nvim.input('ia')
@@ -187,19 +192,19 @@ describe('cursors#onchange', () => {
     let doc = await setup()
     await doc.buffer.setLines(['prepend'], { start: 0, end: 0, strictIndexing: false })
     doc.forceSync()
-    await helper.wait(100)
-    let n = rangeCount()
+    await helper.wait(200)
+    let n = await rangeCount()
     expect(n).toBe(5)
     await nvim.call('cursor', [1, 1])
     await nvim.input('ia')
-    await helper.wait(100)
+    await helper.wait(200)
     doc.forceSync()
     await helper.wait(100)
     await nvim.call('cursor', [2, 1])
     await nvim.input('a')
-    await helper.wait(100)
+    await helper.wait(200)
     doc.forceSync()
-    await helper.wait(100)
+    await helper.wait(200)
     let lines = await nvim.call('getline', [1, '$'])
     expect(lines).toEqual(['aprepend', 'afoo afoo afoo', 'abar abar'])
   })
@@ -246,7 +251,7 @@ describe('cursors#onchange', () => {
 
   it('should remove text middle', async () => {
     let doc = await setup()
-    await nvim.call('cursor', [1, 2])
+    await nvim.call('cursor', [2, 2])
     await nvim.command('normal! x')
     doc.forceSync()
     await helper.wait(100)
@@ -319,17 +324,19 @@ describe('cursors#onchange', () => {
     await nvim.input('iabc')
     await helper.wait(30)
     doc.forceSync()
-    expect(rangeCount()).toBe(5)
+    let n = await rangeCount()
+    expect(n).toBe(5)
     await helper.wait(30)
     await nvim.command('undo')
     await helper.wait(30)
     doc.forceSync()
-    expect(rangeCount()).toBe(5)
+    n = await rangeCount()
+    expect(n).toBe(5)
     await helper.wait(30)
     await nvim.command('redo')
     await helper.wait(30)
     doc.forceSync()
-    expect(rangeCount()).toBe(5)
+    expect(await rangeCount()).toBe(5)
     let lines = await nvim.call('getline', [1, '$'])
     expect(lines).toEqual(['fooabc fooabc fooabc', 'barabc barabc'])
   })
@@ -339,17 +346,17 @@ describe('cursors#onchange', () => {
     await nvim.setLine('"foo" foo foo')
     await helper.wait(30)
     doc.forceSync()
-    expect(rangeCount()).toBe(5)
+    expect(await rangeCount()).toBe(5)
     await helper.wait(30)
     await nvim.command('undo')
     await helper.wait(30)
     doc.forceSync()
-    expect(rangeCount()).toBe(5)
+    expect(await rangeCount()).toBe(5)
     await helper.wait(30)
     await nvim.command('redo')
     await helper.wait(30)
     doc.forceSync()
-    expect(rangeCount()).toBe(5)
+    expect(await rangeCount()).toBe(5)
     let lines = await nvim.call('getline', [1, '$'])
     expect(lines).toEqual(['"foo" "foo" "foo"', '"bar" "bar"'])
   })
@@ -379,21 +386,17 @@ describe('cursors#keymaps', () => {
 
   it('should setup cancel keymap', async () => {
     await setup()
-    let count = rangeCount()
+    let count = await rangeCount()
     expect(count).toBe(3)
     await nvim.input('<esc>')
     await helper.wait(100)
-    count = rangeCount()
+    count = await rangeCount()
     expect(count).toBe(0)
     let has = await hasKeymap('<Esc>')
-    expect(has).toBe(true)
-    await nvim.input('<esc>')
-    await helper.wait(100)
-    has = await hasKeymap('<Esc>')
     expect(has).toBe(false)
   })
 
-  it('should setup nextKey', async () => {
+  it('should setup next key', async () => {
     await setup()
     await nvim.input('<C-n>')
     await helper.wait(50)
@@ -405,7 +408,7 @@ describe('cursors#keymaps', () => {
     expect(cursor).toEqual([1, 0])
   })
 
-  it('should setup previouskey', async () => {
+  it('should setup previous key', async () => {
     await setup()
     await nvim.input('<C-p>')
     await helper.wait(50)

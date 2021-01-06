@@ -1,7 +1,8 @@
-import { CancellationToken, Disposable, DocumentSelector, Location, Position, ReferenceContext, TextDocument } from 'vscode-languageserver-protocol'
+import { CancellationToken, Disposable, DocumentSelector, Location, Position, ReferenceContext } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { ReferenceProvider } from './index'
 import Manager, { ProviderItem } from './manager'
-import uuid = require('uuid/v4')
+import { v4 as uuid } from 'uuid'
 
 export default class ReferenceManager extends Manager<ReferenceProvider> implements Disposable {
 

@@ -1,7 +1,7 @@
 {
+  "eslint.validate": ["typescript"],
+  "eslint.lintTask.options": [".", "--ext", ".ts"],
   "typescript.format.insertSpaceAfterFunctionKeywordForAnonymousFunctions": false,
   "typescript.format.insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces": true,
-  "typescript.preferences.noSemicolons": true,
-  "typescript.suggestionActions.enabled": false,
-  "coc.preferences.extensionUpdateCheck": "never"
+  "typescript.suggestionActions.enabled": false
 }

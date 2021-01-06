@@ -19,14 +19,13 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  Watchman.dispose()
   await helper.shutdown()
 })
 
 function wait(ms: number): Promise<any> {
   return new Promise(resolve => {
     setTimeout(() => {
-      resolve()
+      resolve(undefined)
     }, ms)
   })
 }
@@ -40,6 +39,7 @@ function createFileChange(file: string, exists = true): FileChangeItem {
     size: 1,
     name: file,
     exists,
+    new: false,
     type: 'f',
     mtime_ms: Date.now()
   }
@@ -108,31 +108,32 @@ describe('watchman', () => {
 
   it('should watchProject', async () => {
     let client = new Watchman(null)
-    let res = await client.watchProject('/tmp/coc')
+    let res = await client.watchProject(__dirname)
     expect(res).toBe(true)
     client.dispose()
   })
 
   it('should subscribe', async () => {
     let client = new Watchman(null, new BufferChannel('watchman', nvim))
-    await client.watchProject('/tmp')
+    let cwd = process.cwd()
+    await client.watchProject(cwd)
     let fn = jest.fn()
-    let disposable = await client.subscribe('/tmp/*', fn)
-    let changes: FileChangeItem[] = [createFileChange('/tmp/a')]
-    sendSubscription((global as any).subscribe, '/tmp', changes)
+    let disposable = await client.subscribe(`${cwd}/*`, fn)
+    let changes: FileChangeItem[] = [createFileChange(`${cwd}/a`)]
+    sendSubscription((global as any).subscribe, cwd, changes)
     await wait(100)
     expect(fn).toBeCalled()
     let call = fn.mock.calls[0][0]
     disposable.dispose()
-    expect(call.root).toBe('/tmp')
+    expect(call.root).toBe(cwd)
     client.dispose()
   })
 
   it('should unsubscribe', async () => {
     let client = new Watchman(null)
-    await client.watchProject('/tmp')
+    await client.watchProject(process.cwd())
     let fn = jest.fn()
-    let disposable = await client.subscribe('/tmp/*', fn)
+    let disposable = await client.subscribe(`${process.cwd()}/*`, fn)
     disposable.dispose()
     client.dispose()
   })
@@ -140,15 +141,15 @@ describe('watchman', () => {
 
 describe('Watchman#createClient', () => {
   it('should create client', async () => {
-    let client = await Watchman.createClient(null, '/tmp')
+    let client = await Watchman.createClient(null, process.cwd())
     expect(client).toBeDefined()
     client.dispose()
   })
 
   it('should resue client for same root', async () => {
-    let client = await Watchman.createClient(null, '/tmp')
+    let client = await Watchman.createClient(null, process.cwd())
     expect(client).toBeDefined()
-    let other = await Watchman.createClient(null, '/tmp')
+    let other = await Watchman.createClient(null, process.cwd())
     expect(client).toBe(other)
     client.dispose()
   })

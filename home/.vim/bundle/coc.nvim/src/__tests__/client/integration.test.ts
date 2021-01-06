@@ -1,4 +1,4 @@
-/*tslint:disable*/
+/* eslint-disable */
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -57,7 +57,7 @@ describe('Client integration', () => {
         }
       }
     }
-    let client = new lsclient.LanguageClient('css', 'Test Language Server', { deferredOptions: () => [clientOptions, serverOptions] })
+    let client = new lsclient.LanguageClient('css', 'Test Language Server', serverOptions, clientOptions)
     let disposable = client.start()
 
     assert.equal(client.initializeResult, undefined)

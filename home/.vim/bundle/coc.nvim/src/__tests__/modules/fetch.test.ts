@@ -1,9 +1,7 @@
-import fs from 'fs'
+import fs from 'fs-extra'
 import os from 'os'
 import path from 'path'
-import rimraf from 'rimraf'
 import { parse } from 'url'
-import { promisify } from 'util'
 import download from '../../model/download'
 import fetch, { getAgent } from '../../model/fetch'
 import helper from '../helper'
@@ -26,6 +24,11 @@ describe('fetch', () => {
   it('should fetch json', async () => {
     let res = await fetch('https://nodejs.org/dist/index.json')
     expect(Array.isArray(res)).toBe(true)
+  }, 10000)
+
+  it('should fetch buffer', async () => {
+    let res = await fetch('https://www.npmjs.com/', { buffer: true })
+    expect(Buffer.isBuffer(res)).toBe(true)
   })
 
   it('should throw on request error', async () => {
@@ -39,37 +42,46 @@ describe('fetch', () => {
   })
 
   it('should report valid proxy', async () => {
-    helper.updateConfiguration('http.proxy', 'domain.com:1234')
-    let agent = getAgent(parse('http://google.com'))
-    // @ts-ignore
-    let proxy = agent.options.proxy
+    let agent = getAgent(parse('http://google.com'), { proxyUrl: 'domain.com:1234' })
+    expect(agent).toBe(null)
+
+    agent = getAgent(parse('http://google.com'), { proxyUrl: 'https://domain.com:1234' })
+    let proxy = (agent as any).proxy
     expect(proxy.host).toBe('domain.com')
     expect(proxy.port).toBe(1234)
 
-    helper.updateConfiguration('http.proxy', 'https://domain.com:1234')
-    agent = getAgent(parse('http://google.com'))
-    // @ts-ignore
-    proxy = agent.options.proxy
+    agent = getAgent(parse('http://google.com'), { proxyUrl: 'http://user:pass@domain.com:1234' })
+    proxy = (agent as any).proxy
     expect(proxy.host).toBe('domain.com')
     expect(proxy.port).toBe(1234)
-
-    helper.updateConfiguration('http.proxy', 'user:pass@domain.com:1234')
-    agent = getAgent(parse('http://google.com'))
-    // @ts-ignore
-    proxy = agent.options.proxy
-    expect(proxy.host).toBe('domain.com')
-    expect(proxy.port).toBe(1234)
-    expect(proxy.proxyAuth).toBe('user:pass')
+    expect(proxy.auth).toBe('user:pass')
   })
 })
 
 describe('download', () => {
+  it('should download binary file', async () => {
+    let url = 'https://registry.npmjs.org/coc-pairs/-/coc-pairs-1.2.13.tgz'
+    let tmpFolder = await fs.mkdtemp(path.join(os.tmpdir(), 'coc-test'))
+    let res = await download(url, { dest: tmpFolder })
+    expect(fs.existsSync(res)).toBe(true)
+    await fs.remove(tmpFolder)
+  }, 10000)
+
   it('should download tgz', async () => {
     let url = 'https://registry.npmjs.org/coc-pairs/-/coc-pairs-1.2.13.tgz'
-    let tmpFolder = await promisify(fs.mkdtemp)(path.join(os.tmpdir(), 'coc-test'))
-    await download(url, { dest: tmpFolder })
+    let tmpFolder = await fs.mkdtemp(path.join(os.tmpdir(), 'coc-test'))
+    await download(url, { dest: tmpFolder, extract: 'untar' })
     let file = path.join(tmpFolder, 'package.json')
     expect(fs.existsSync(file)).toBe(true)
-    await promisify(rimraf)(tmpFolder, { glob: false })
+    await fs.remove(tmpFolder)
   }, 10000)
+
+  it('should extract zip file', async () => {
+    let url = 'https://codeload.github.com/chemzqm/vimrc/zip/master'
+    let tmpFolder = await fs.mkdtemp(path.join(os.tmpdir(), 'coc-test'))
+    await download(url, { dest: tmpFolder, extract: 'unzip' })
+    let folder = path.join(tmpFolder, 'vimrc-master')
+    expect(fs.existsSync(folder)).toBe(true)
+    await fs.remove(tmpFolder)
+  }, 30000)
 })

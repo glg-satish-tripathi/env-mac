@@ -1,67 +1,101 @@
-/**
- * popup interfact for vim
- */
-import { TextItem, PopupOptions } from '../types'
 import { Neovim } from '@chemzqm/neovim'
+const isVim = process.env.VIM_NODE_RPC == '1'
 
-export class Popup {
-  public id: number
-  public bufferId: number
-  constructor(private nvim: Neovim) {
+/**
+ * More methods for float window/popup
+ */
+export default class Popup {
+  constructor(
+    private nvim: Neovim,
+    public readonly winid,
+    public readonly bufnr) {
   }
 
-  public async create(text: string[] | TextItem[], options: PopupOptions): Promise<void> {
+  public get valid(): Promise<boolean> {
+    return this.nvim.call('coc#float#valid', [this.winid]).then(res => {
+      return !!res
+    })
+  }
+
+  public close(): void {
+    this.nvim.call('coc#float#close', [this.winid], true)
+  }
+
+  public refreshScrollbar(): void {
+    if (!isVim) this.nvim.call('coc#float#nvim_scrollbar', [this.winid], true)
+  }
+
+  public execute(cmd: string): void {
+    this.nvim.call('coc#float#execute', [this.winid, cmd], true)
+  }
+
+  public click(lnum: number, col: number): void {
     let { nvim } = this
-    this.id = await nvim.call('popup_create', [text, options])
-    this.bufferId = await nvim.call('winbufnr', [this.id]) as number
+    nvim.call('win_gotoid', [this.winid], true)
+    nvim.call('cursor', [lnum, col], true)
+    nvim.call('coc#float#nvim_float_click', [], true)
   }
 
-  public hide(): void {
-    if (!this.id) return
-    this.nvim.call('popup_hide', [this.id], true)
+  /**
+   * Simple scroll method, not consider wrapped lines.
+   */
+  public async scrollForward(): Promise<void> {
+    let { nvim, bufnr, winid } = this
+    let buf = nvim.createBuffer(bufnr)
+    let total = await buf.length
+    let botline: number
+    if (!isVim) {
+      let infos = await nvim.call('getwininfo', [winid])
+      if (!infos || !infos.length) return
+      botline = infos[0].botline
+    } else {
+      botline = await nvim.eval(`get(popup_getpos(${winid}), 'lastline', 0)`) as number
+    }
+    if (botline >= total || botline == 0) return
+    nvim.pauseNotification()
+    this.setCursor(botline - 1)
+    this.execute(`normal! ${botline}Gzt`)
+    this.refreshScrollbar()
+    nvim.command('redraw', true)
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    nvim.resumeNotification(false, true)
   }
 
-  public async valid(): Promise<boolean> {
-    if (!this.bufferId) return false
-    await this.nvim.call('bufexists', [this.bufferId])
+  /**
+   * Simple scroll method, not consider wrapped lines.
+   */
+  public async scrollBackward(): Promise<void> {
+    let { nvim, winid } = this
+    let topline: number
+    if (!isVim) {
+      let infos = await nvim.call('getwininfo', [winid])
+      if (!infos || !infos.length) return
+      topline = infos[0].topline
+    } else {
+      topline = await nvim.eval(`get(popup_getpos(${winid}), 'firstline', 0)`) as number
+    }
+    if (topline == 1) return
+    nvim.pauseNotification()
+    this.setCursor(topline - 1)
+    this.execute(`normal! ${topline}Gzb`)
+    this.refreshScrollbar()
+    nvim.command('redraw', true)
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    nvim.resumeNotification(false, true)
   }
 
-  public async visible(): Promise<boolean> {
-    if (!this.id) return false
-    let opt = await this.nvim.call('popup_getpos', [this.id])
-    return opt && opt.visible == 1
-  }
-
-  public show(): void {
-    if (!this.id) return
-    this.nvim.call('popup_show', [this.id], true)
-  }
-
-  public move(options: Partial<PopupOptions>): void {
-    if (!this.id) return
-    this.nvim.call('popup_move', [this.id, options], true)
-  }
-
-  public async getPosition(): Promise<any> {
-    return await this.nvim.call('popup_getpos', [this.id])
-  }
-
-  public setFiletype(filetype: string): void {
-    if (!this.id) return
-    let { nvim } = this
-    // nvim.call('win_execute', [this.id, 'syntax enable'], true)
-    nvim.call('setbufvar', [this.bufferId, '&filetype', filetype], true)
-  }
-
-  public dispose(): void {
-    if (this.id) {
-      this.nvim.call('popup_close', [this.id], true)
+  /**
+   * Move cursor and highlight.
+   */
+  public setCursor(index: number): void {
+    let { nvim, bufnr, winid } = this
+    if (isVim) {
+      nvim.call('win_execute', [winid, `exe ${index + 1}`], true)
+    } else {
+      let win = nvim.createWindow(winid)
+      win.notify('nvim_win_set_cursor', [[index + 1, 0]])
+      nvim.command(`sign unplace 6 buffer=${bufnr}`, true)
+      nvim.command(`sign place 6 line=${index + 1} name=CocCurrentLine buffer=${bufnr}`, true)
     }
   }
-}
-
-export default async function createPopup(nvim: Neovim, text: string[] | TextItem[], options: PopupOptions): Promise<Popup> {
-  let popup = new Popup(nvim)
-  await popup.create(text, options)
-  return popup
 }

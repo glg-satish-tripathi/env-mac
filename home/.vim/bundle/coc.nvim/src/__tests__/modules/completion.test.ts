@@ -1,6 +1,6 @@
 import { Neovim } from '@chemzqm/neovim'
 import { Disposable } from 'vscode-jsonrpc'
-import { CompletionItem, InsertTextFormat, Position, Range, TextEdit } from 'vscode-languageserver-types'
+import { CompletionItem, InsertTextFormat, Position, Range, TextEdit, CompletionList } from 'vscode-languageserver-types'
 import completion from '../../completion'
 import languages from '../../languages'
 import { CompletionItemProvider } from '../../provider'
@@ -67,7 +67,6 @@ describe('completion start', () => {
     await nvim.call('cursor', [1, 2])
     let option: CompleteOption = await nvim.call('coc#util#get_complete_option')
     await completion.startCompletion(option)
-    await helper.wait(30)
     expect(completion.isActivated).toBe(true)
   })
 
@@ -78,13 +77,11 @@ describe('completion start', () => {
       name: 'slow',
       sourceType: SourceType.Service,
       triggerCharacters: ['.'],
-      doComplete: (_opt: CompleteOption): Promise<CompleteResult> => {
-        return new Promise(resolve => {
-          setTimeout(() => {
-            resolve({ items: [{ word: 'foo' }, { word: 'bar' }] })
-          }, 600)
-        })
-      }
+      doComplete: (_opt: CompleteOption): Promise<CompleteResult> => new Promise(resolve => {
+        setTimeout(() => {
+          resolve({ items: [{ word: 'foo' }, { word: 'bar' }] })
+        }, 600)
+      })
     }
     disposables.push(sources.addSource(source))
     await helper.edit()
@@ -127,11 +124,9 @@ describe('completion resumeCompletion', () => {
       name: 'empty',
       sourceType: SourceType.Service,
       triggerCharacters: ['.'],
-      doComplete: (_opt: CompleteOption): Promise<CompleteResult> => {
-        return new Promise(resolve => {
-          resolve({ items: [{ word: 'foo bar' }] })
-        })
-      }
+      doComplete: (_opt: CompleteOption): Promise<CompleteResult> => new Promise(resolve => {
+        resolve({ items: [{ word: 'foo bar' }] })
+      })
     }
     sources.addSource(source)
     await helper.edit()
@@ -153,13 +148,11 @@ describe('completion resumeCompletion', () => {
       name: 'source',
       sourceType: SourceType.Service,
       triggerCharacters: ['.'],
-      doComplete: (_opt: CompleteOption): Promise<CompleteResult> => {
-        return new Promise(resolve => {
-          setTimeout(() => {
-            resolve({ items: [{ word: 'foo' }, { word: 'bar' }] })
-          }, 60)
-        })
-      }
+      doComplete: (): Promise<CompleteResult> => new Promise(resolve => {
+        setTimeout(() => {
+          resolve({ items: [{ word: 'foo' }, { word: 'bar' }] })
+        }, 60)
+      })
     }
     sources.addSource(source)
     await helper.edit()
@@ -181,13 +174,11 @@ describe('completion resumeCompletion', () => {
       name: 'slow',
       sourceType: SourceType.Service,
       triggerCharacters: ['.'],
-      doComplete: (_opt: CompleteOption): Promise<CompleteResult> => {
-        return new Promise(resolve => {
-          setTimeout(() => {
-            resolve({ items: [{ word: 'foo' }, { word: 'bar' }] })
-          }, 600)
-        })
-      }
+      doComplete: (): Promise<CompleteResult> => new Promise(resolve => {
+        setTimeout(() => {
+          resolve({ items: [{ word: 'foo' }, { word: 'bar' }] })
+        }, 600)
+      })
     }
     disposables.push(sources.addSource(source))
     await helper.edit()
@@ -223,12 +214,10 @@ describe('completion resumeCompletion', () => {
     await nvim.input('i.')
     await helper.waitPopup()
     expect(completion.isActivated).toBe(true)
-    let items = await helper.items()
     await nvim.input('a')
     await helper.wait(30)
     await nvim.input('b')
     await helper.wait(100)
-    items = await helper.items()
   })
 
   it('should not complete inComplete source when isIncomplete is false', async () => {
@@ -304,13 +293,11 @@ describe('completion TextChangedP', () => {
 
   it('should fix cursor position with plain text on additionalTextEdits', async () => {
     let provider: CompletionItemProvider = {
-      provideCompletionItems: async (): Promise<CompletionItem[]> => {
-        return [{
-          label: 'foo',
-          filterText: 'foo',
-          additionalTextEdits: [TextEdit.insert(Position.create(0, 0), 'a\nbar')]
-        }]
-      }
+      provideCompletionItems: async (): Promise<CompletionItem[]> => [{
+        label: 'foo',
+        filterText: 'foo',
+        additionalTextEdits: [TextEdit.insert(Position.create(0, 0), 'a\nbar')]
+      }]
     }
     disposables.push(languages.registerCompletionItemProvider('edits', 'edit', null, provider))
     await nvim.input('if')
@@ -324,24 +311,123 @@ describe('completion TextChangedP', () => {
     expect(col).toBe(7)
   })
 
-  it('should fix cursor position with snippet on additionalTextEdits', async () => {
-    await helper.createDocument()
+  it('should filter in complete request', async () => {
     let provider: CompletionItemProvider = {
-      provideCompletionItems: async (): Promise<CompletionItem[]> => {
+      provideCompletionItems: async (doc, pos, token, context): Promise<CompletionList> => {
+        let option = (context as any).option
+        if (context.triggerCharacter == '.') {
+          return {
+            isIncomplete: true,
+            items: [
+              {
+                label: 'foo'
+              }, {
+                label: 'bar'
+              }
+            ]
+          }
+        }
+        if (option.input == 'f') {
+          await helper.wait(100)
+          if (token.isCancellationRequested) return
+          return {
+            isIncomplete: true,
+            items: [
+              {
+                label: 'foo'
+              }
+            ]
+          }
+        }
+        if (option.input == 'fo') {
+          await helper.wait(100)
+          if (token.isCancellationRequested) return
+          return {
+            isIncomplete: false,
+            items: [
+              {
+                label: 'foo'
+              }
+            ]
+          }
+        }
+      }
+    }
+    disposables.push(languages.registerCompletionItemProvider('edits', 'edit', null, provider, ['.']))
+    await nvim.input('i.')
+    await helper.waitPopup()
+    await nvim.input('f')
+    await helper.wait(60)
+    await nvim.input('o')
+    await helper.wait(300)
+    let res = await helper.getItems()
+    expect(res.length).toBe(1)
+  })
+
+  it('should provide word when textEdit after startcol', async () => {
+    // some LS would send textEdit after first character,
+    // need fix the word from newText
+    let provider: CompletionItemProvider = {
+      provideCompletionItems: async (_, position): Promise<CompletionItem[]> => {
+        if (position.line != 0) return null
         return [{
-          label: 'if',
-          insertTextFormat: InsertTextFormat.Snippet,
-          textEdit: { range: Range.create(0, 0, 0, 2), newText: 'if($1)' },
-          additionalTextEdits: [TextEdit.insert(Position.create(0, 0), 'bar ')],
-          preselect: true
+          label: 'bar',
+          filterText: 'ar',
+          textEdit: {
+            range: Range.create(0, 1, 0, 1),
+            newText: 'ar'
+          }
         }]
       }
     }
     disposables.push(languages.registerCompletionItemProvider('edits', 'edit', null, provider))
-    await nvim.input('iif')
+    await nvim.input('ib')
     await helper.waitPopup()
-    await helper.selectCompleteItem(0)
-    await helper.wait(300)
+    let context = await nvim.getVar('coc#_context') as any
+    expect(context.start).toBe(1)
+    expect(context.candidates[0].word).toBe('ar')
+  })
+
+  it('should adjust completion position by textEdit start position', async () => {
+    let provider: CompletionItemProvider = {
+      provideCompletionItems: async (_document, _position, _token, context): Promise<CompletionItem[]> => {
+        if (!context.triggerCharacter) return
+        return [{
+          label: 'foo',
+          textEdit: {
+            range: Range.create(0, 0, 0, 1),
+            newText: '?foo'
+          }
+        }]
+      }
+    }
+    disposables.push(languages.registerCompletionItemProvider('fix', 'f', null, provider, ['?']))
+    await nvim.input('i?')
+    await helper.waitPopup()
+    await nvim.eval('feedkeys("\\<C-n>", "in")')
+    await helper.wait(200)
+    let line = await nvim.line
+    expect(line).toBe('?foo')
+  })
+
+  it('should fix cursor position with snippet on additionalTextEdits', async () => {
+    await helper.createDocument()
+    let provider: CompletionItemProvider = {
+      provideCompletionItems: async (): Promise<CompletionItem[]> => [{
+        label: 'if',
+        insertTextFormat: InsertTextFormat.Snippet,
+        textEdit: { range: Range.create(0, 0, 0, 2), newText: 'if($1)' },
+        additionalTextEdits: [TextEdit.insert(Position.create(0, 0), 'bar ')],
+        preselect: true
+      }]
+    }
+    disposables.push(languages.registerCompletionItemProvider('edits', 'edit', null, provider))
+    await nvim.input('ii')
+    await helper.waitPopup()
+    let res = await helper.getItems()
+    let idx = res.findIndex(o => o.menu == '[edit]')
+    await helper.selectCompleteItem(idx)
+    await helper.wait(800)
     let line = await nvim.line
     expect(line).toBe('bar if()')
     let [, lnum, col] = await nvim.call('getcurpos')
@@ -351,15 +437,13 @@ describe('completion TextChangedP', () => {
 
   it('should fix cursor position with plain text snippet on additionalTextEdits', async () => {
     let provider: CompletionItemProvider = {
-      provideCompletionItems: async (): Promise<CompletionItem[]> => {
-        return [{
-          label: 'if',
-          insertTextFormat: InsertTextFormat.Snippet,
-          textEdit: { range: Range.create(0, 0, 0, 2), newText: 'do$0' },
-          additionalTextEdits: [TextEdit.insert(Position.create(0, 0), 'bar ')],
-          preselect: true
-        }]
-      }
+      provideCompletionItems: async (): Promise<CompletionItem[]> => [{
+        label: 'if',
+        insertTextFormat: InsertTextFormat.Snippet,
+        textEdit: { range: Range.create(0, 0, 0, 2), newText: 'do$0' },
+        additionalTextEdits: [TextEdit.insert(Position.create(0, 0), 'bar ')],
+        preselect: true
+      }]
     }
     disposables.push(languages.registerCompletionItemProvider('edits', 'edit', null, provider))
     await nvim.input('iif')
@@ -378,15 +462,13 @@ describe('completion TextChangedP', () => {
     let res = await snippetManager.insertSnippet('func($1)$0')
     expect(res).toBe(true)
     let provider: CompletionItemProvider = {
-      provideCompletionItems: async (): Promise<CompletionItem[]> => {
-        return [{
-          label: 'if',
-          insertTextFormat: InsertTextFormat.Snippet,
-          insertText: 'do$0',
-          additionalTextEdits: [TextEdit.insert(Position.create(0, 0), 'bar ')],
-          preselect: true
-        }]
-      }
+      provideCompletionItems: async (): Promise<CompletionItem[]> => [{
+        label: 'if',
+        insertTextFormat: InsertTextFormat.Snippet,
+        insertText: 'do$0',
+        additionalTextEdits: [TextEdit.insert(Position.create(0, 0), 'bar ')],
+        preselect: true
+      }]
     }
     disposables.push(languages.registerCompletionItemProvider('edits', 'edit', null, provider))
     await nvim.input('if')
@@ -402,14 +484,12 @@ describe('completion TextChangedP', () => {
 
   it('should fix input for snippet item', async () => {
     let provider: CompletionItemProvider = {
-      provideCompletionItems: async (): Promise<CompletionItem[]> => {
-        return [{
-          label: 'foo',
-          filterText: 'foo',
-          insertText: '${1:foo}($2)',
-          insertTextFormat: InsertTextFormat.Snippet,
-        }]
-      }
+      provideCompletionItems: async (): Promise<CompletionItem[]> => [{
+        label: 'foo',
+        filterText: 'foo',
+        insertText: '${1:foo}($2)',
+        insertTextFormat: InsertTextFormat.Snippet,
+      }]
     }
     disposables.push(languages.registerCompletionItemProvider('snippets-test', 'st', null, provider))
     await nvim.input('if')
@@ -426,9 +506,7 @@ describe('completion TextChangedP', () => {
       enable: true,
       name: 'temp',
       sourceType: SourceType.Service,
-      doComplete: (_opt: CompleteOption): Promise<CompleteResult> => {
-        return Promise.resolve({ items: [{ word: 'foo#abc' }] })
-      },
+      doComplete: (_opt: CompleteOption): Promise<CompleteResult> => Promise.resolve({ items: [{ word: 'foo#abc' }] }),
     }
     disposables.push(sources.addSource(source))
     await nvim.input('if')
@@ -439,6 +517,29 @@ describe('completion TextChangedP', () => {
     expect(items[0].word).toBe('foo#abc')
   })
 
+  it('should use source-provided score', async () => {
+    let source: ISource = {
+      priority: 0,
+      enable: true,
+      name: 'source',
+      sourceType: SourceType.Service,
+      doComplete: (_opt: CompleteOption): Promise<CompleteResult> => Promise.resolve({
+        items: [
+          { word: 'candidate_a', sourceScore: 0.1 },
+          { word: 'candidate_b', sourceScore: 10 },
+          { word: 'candidate_c' },
+        ]
+      }),
+    }
+    disposables.push(sources.addSource(source))
+    await nvim.input('ocand')
+    await helper.waitPopup()
+    let items = await helper.getItems()
+    expect(items[0].word).toBe('candidate_b')
+    expect(items[1].word).toBe('candidate_c')
+    expect(items[2].word).toBe('candidate_a')
+  })
+
   it('should do resolve for complete item', async () => {
     let source: ISource = {
       priority: 0,
@@ -446,9 +547,7 @@ describe('completion TextChangedP', () => {
       name: 'resolve',
       sourceType: SourceType.Service,
       triggerCharacters: ['.'],
-      doComplete: (_opt: CompleteOption): Promise<CompleteResult> => {
-        return Promise.resolve({ items: [{ word: 'foo' }] })
-      },
+      doComplete: (_opt: CompleteOption): Promise<CompleteResult> => Promise.resolve({ items: [{ word: 'foo' }] }),
       onCompleteResolve: item => {
         item.info = 'detail'
       }
@@ -498,57 +597,7 @@ describe('completion option', () => {
   })
 })
 
-describe('completion resume', () => {
-  it('should respect commitCharacter on TextChangedI', async () => {
-    let source: ISource = {
-      priority: 0,
-      enable: true,
-      name: 'slow',
-      sourceType: SourceType.Service,
-      triggerCharacters: ['.'],
-      doComplete: (opt: CompleteOption): Promise<CompleteResult> => {
-        if (opt.triggerCharacter == '.') {
-          return Promise.resolve({ items: [{ word: 'bar' }] })
-        }
-        return Promise.resolve({ items: [{ word: 'foo' }] })
-      },
-      shouldCommit: (_item, character) => {
-        return character == '.'
-      }
-    }
-    sources.addSource(source)
-    await nvim.input('if')
-    await helper.pumvisible()
-    await helper.wait(100)
-    await nvim.input('.')
-    await helper.wait(100)
-    sources.removeSource(source)
-  })
-})
-
 describe('completion trigger', () => {
-  it('should trigger completion on CursorMovedI', async () => {
-    let source: ISource = {
-      priority: 0,
-      enable: true,
-      name: 'trigger',
-      sourceType: SourceType.Service,
-      triggerCharacters: ['>'],
-      doComplete: async (opt: CompleteOption): Promise<CompleteResult> => {
-        if (opt.triggerCharacter == '>') {
-          return { items: [{ word: 'foo' }] }
-        }
-        return null
-      }
-    }
-    disposables.push(sources.addSource(source))
-    await helper.edit()
-    await nvim.input('i><esc>a')
-    await helper.waitPopup()
-    let items = await helper.getItems()
-    expect(items.length).toBe(1)
-  })
-
   it('should trigger completion on type trigger character', async () => {
     let source: ISource = {
       priority: 1,
@@ -583,7 +632,6 @@ describe('completion trigger', () => {
     await helper.wait(100)
     expect(completion.isActivated).toBe(false)
     config.update('autoTrigger', 'always')
-    await helper.wait(100)
   })
 
   it('should trigger complete on trigger patterns match', async () => {
@@ -638,5 +686,43 @@ describe('completion trigger', () => {
     await helper.waitPopup()
     let items = await helper.getItems()
     expect(items.length).toBeGreaterThan(2)
+  })
+})
+
+describe('completion TextChangedI', () => {
+  it('should respect commitCharacter on TextChangedI', async () => {
+    let source: ISource = {
+      priority: 0,
+      enable: true,
+      name: 'slow',
+      sourceType: SourceType.Service,
+      triggerCharacters: ['.'],
+      doComplete: (opt: CompleteOption): Promise<CompleteResult> => {
+        if (opt.triggerCharacter == '.') {
+          return Promise.resolve({ items: [{ word: 'bar' }] })
+        }
+        return Promise.resolve({ items: [{ word: 'foo' }] })
+      },
+      shouldCommit: (_item, character) => character == '.'
+    }
+    sources.addSource(source)
+    await nvim.input('if')
+    await helper.pumvisible()
+    await helper.wait(100)
+    await nvim.input('.')
+    await helper.wait(100)
+    sources.removeSource(source)
+  })
+
+  it('should cancel completion with same pretext', async () => {
+    await nvim.setLine('foo')
+    await nvim.input('of')
+    await helper.pumvisible()
+    await helper.wait(30)
+    await nvim.call('coc#_cancel', [])
+    let line = await nvim.line
+    let visible = await nvim.call('pumvisible')
+    expect(line).toBe('f')
+    expect(visible).toBe(0)
   })
 })

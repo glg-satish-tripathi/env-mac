@@ -1,5 +1,5 @@
 import { Neovim } from '@chemzqm/neovim'
-import { Mutex } from 'await-semaphore'
+import { Mutex } from '../util/mutex'
 import { ChildProcess, spawn } from 'child_process'
 import { EventEmitter } from 'events'
 import path from 'path'
@@ -8,8 +8,8 @@ import { Range } from 'vscode-languageserver-types'
 import which from 'which'
 import Highlighter from '../model/highligher'
 import { ansiparse } from '../util/ansiparse'
-import workspace from '../workspace'
-import Refactor, { FileItem, FileRange } from './refactor'
+import window from '../window'
+import RefactorBuffer, { FileItem, FileRange } from './refactor/buffer'
 const logger = require('../util/logger')('handler-search')
 
 const defaultArgs = ['--color', 'ansi', '--colors', 'path:fg:black', '--colors', 'line:fg:green', '--colors', 'match:fg:red', '--no-messages', '--heading', '-n']
@@ -30,7 +30,7 @@ class Task extends EventEmitter {
     let highlights: Range[] = []
     let create = true
     rl.on('line', content => {
-      if (content.indexOf(controlCode) !== -1) {
+      if (content.includes(controlCode)) {
         let items = ansiparse(content)
         if (items[0].foreground == 'black') {
           fileItem = { filepath: path.join(cwd, items[0].text), ranges: [] }
@@ -106,15 +106,15 @@ export default class Search {
   constructor(private nvim: Neovim, private cmd = 'rg') {
   }
 
-  public run(args: string[], cwd: string, refactor: Refactor): Promise<void> {
+  public run(args: string[], cwd: string, refactorBuf: RefactorBuffer): Promise<void> {
     let { nvim, cmd } = this
-    let { afterContext, beforeContext } = refactor.config
+    let { afterContext, beforeContext } = refactorBuf.config
     let argList = ['-A', afterContext.toString(), '-B', beforeContext.toString()].concat(defaultArgs, args)
     argList.push('--', './')
     try {
       cmd = which.sync(cmd)
     } catch (e) {
-      workspace.showMessage('Please install ripgrep and make sure rg is in your $PATH', 'error')
+      window.showMessage(`Please install ripgrep and make sure ${this.cmd} is in your $PATH`, 'error')
       return Promise.reject(e)
     }
     this.task = new Task()
@@ -131,7 +131,7 @@ export default class Search {
       fileItems = []
       const release = await mutex.acquire()
       try {
-        await refactor.addFileItems(items)
+        await refactorBuf.addFileItems(items)
       } catch (e) {
         logger.error(e)
       }
@@ -146,7 +146,7 @@ export default class Search {
       })
       this.task.on('error', message => {
         clearInterval(interval)
-        workspace.showMessage(`Error on command "${cmd}": ${message}`, 'error')
+        window.showMessage(`Error on command "${cmd}": ${message}`, 'error')
         this.task = null
         reject(new Error(message))
       })
@@ -158,12 +158,12 @@ export default class Search {
           release()
           this.task.removeAllListeners()
           this.task = null
-          let { document } = refactor
-          if (document) {
-            let buf = document.buffer
+          let buf = refactorBuf.buffer
+          if (buf) {
             nvim.pauseNotification()
             if (files == 0) {
-              buf.setLines(['No match found'], { start: 1, end: 2, strictIndexing: false })
+              // eslint-disable-next-line @typescript-eslint/no-floating-promises
+              buf.setLines(['No match found'], { start: 1, end: 2, strictIndexing: false }, true)
               buf.addHighlight({ line: 1, srcId: -1, colEnd: -1, colStart: 0, hlGroup: 'Error' }).logError()
               buf.setOption('modified', false, true)
             } else {

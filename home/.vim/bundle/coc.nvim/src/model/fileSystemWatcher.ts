@@ -1,9 +1,11 @@
 import { Disposable, Emitter, Event } from 'vscode-languageserver-protocol'
 import { URI } from 'vscode-uri'
 import Watchman, { FileChange } from '../watchman'
-import path = require('path')
+import minimatch from 'minimatch'
+import path from 'path'
 import { RenameEvent } from '../types'
 import { disposeAll } from '../util'
+import { splitArray } from '../util/array'
 const logger = require('../util/logger')('filesystem-watcher')
 
 export default class FileSystemWatcher implements Disposable {
@@ -42,19 +44,20 @@ export default class FileSystemWatcher implements Disposable {
       ignoreDeleteEvents } = this
     let disposable = await client.subscribe(globPattern, (change: FileChange) => {
       let { root, files } = change
-      files = files.filter(f => f.type == 'f')
+      files = files.filter(f => f.type == 'f' && minimatch(f.name, globPattern, { dot: true }))
       for (let file of files) {
         let uri = URI.file(path.join(root, file.name))
         if (!file.exists) {
           if (!ignoreDeleteEvents) this._onDidDelete.fire(uri)
         } else {
-          if (file.size != 0) {
-            if (!ignoreChangeEvents) this._onDidChange.fire(uri)
-          } else {
+          if (file.new === true) {
             if (!ignoreCreateEvents) this._onDidCreate.fire(uri)
+          } else {
+            if (!ignoreChangeEvents) this._onDidChange.fire(uri)
           }
         }
       }
+      // file rename
       if (files.length == 2 && !files[0].exists && files[1].exists) {
         let oldFile = files[0]
         let newFile = files[1]
@@ -63,6 +66,21 @@ export default class FileSystemWatcher implements Disposable {
             oldUri: URI.file(path.join(root, oldFile.name)),
             newUri: URI.file(path.join(root, newFile.name))
           })
+        }
+      }
+      // detect folder rename
+      if (files.length >= 2) {
+        let [oldFiles, newFiles] = splitArray(files, o => o.exists === false)
+        if (oldFiles.length == newFiles.length) {
+          for (let oldFile of oldFiles) {
+            let newFile = newFiles.find(o => o.size == oldFile.size && o.mtime_ms == oldFile.mtime_ms)
+            if (newFile) {
+              this._onDidRename.fire({
+                oldUri: URI.file(path.join(root, oldFile.name)),
+                newUri: URI.file(path.join(root, newFile.name))
+              })
+            }
+          }
         }
       }
     })

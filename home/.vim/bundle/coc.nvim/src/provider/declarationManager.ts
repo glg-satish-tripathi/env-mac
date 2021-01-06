@@ -1,7 +1,8 @@
-import { CancellationToken, Disposable, DocumentSelector, Location, Position, TextDocument, LocationLink } from 'vscode-languageserver-protocol'
+import { CancellationToken, Disposable, DocumentSelector, Location, Position, LocationLink } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { DeclarationProvider } from './index'
 import Manager, { ProviderItem } from './manager'
-import uuid = require('uuid/v4')
+import { v4 as uuid } from 'uuid'
 const logger = require('../util/logger')('definitionManager')
 
 export default class DeclarationManager extends Manager<DeclarationProvider> implements Disposable {

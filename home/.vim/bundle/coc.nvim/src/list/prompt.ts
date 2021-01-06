@@ -1,7 +1,6 @@
 import { Neovim } from '@chemzqm/neovim'
 import { Emitter, Event } from 'vscode-languageserver-protocol'
 import { ListMode, ListOptions, Matcher } from '../types'
-import workspace from '../workspace'
 import ListConfiguration from './configuration'
 const logger = require('../util/logger')('list-prompt')
 
@@ -54,16 +53,13 @@ export default class Prompt {
       this._mode = opts.mode
       this._matcher = opts.interactive ? '' : opts.matcher
     }
-    let fn = workspace.isVim ? 'coc#list#prompt_start' : 'coc#list#start_prompt'
-    this.nvim.call(fn, [], true)
+    this.nvim.call('coc#prompt#start_prompt', ['list'], true)
     this.drawPrompt()
   }
 
   public cancel(): void {
     let { nvim } = this
-    nvim.command('echo ""', true)
-    nvim.command('redraw', true)
-    nvim.call('coc#list#stop_prompt', [], true)
+    nvim.call('coc#prompt#stop_prompt', ['list'], true)
   }
 
   public reset(): void {
@@ -189,17 +185,19 @@ export default class Prompt {
     }
   }
 
-  public async insertRegister(): Promise<void> {
+  public insertRegister(): void {
     this.requestInput = true
   }
 
   public async paste(): Promise<void> {
-    await this.eval('@*')
+    let text = await this.nvim.eval('@*') as string
+    text = text.replace(/\n/g, '')
+    if (!text) return
+    this.addText(text)
   }
 
   public async eval(expression: string): Promise<void> {
-    let { cusorIndex, input } = this
-    let text = await this.nvim.eval(expression) as string
+    let text = await this.nvim.call('eval', [expression]) as string
     text = text.replace(/\n/g, '')
     this.addText(text)
   }

@@ -5,6 +5,7 @@ import Mru from '../../model/mru'
 import { ListContext, ListItem } from '../../types'
 import workspace from '../../workspace'
 import BasicList from '../basic'
+import { formatListItems, UnformattedListItem } from '../formatting'
 
 export default class CommandsList extends BasicList {
   public defaultAction = 'run'
@@ -18,37 +19,30 @@ export default class CommandsList extends BasicList {
     this.addAction('run', async item => {
       let { cmd } = item.data
       await events.fire('Command', [cmd])
-      await commandManager.executeCommand(cmd)
+      commandManager.executeCommand(cmd).logError()
       await commandManager.addRecent(cmd)
+    })
+    this.addAction('append', async item => {
+      let { cmd } = item.data
+      await nvim.feedKeys(`:CocCommand ${cmd} `, 'n', false)
     })
   }
 
   public async loadItems(_context: ListContext): Promise<ListItem[]> {
-    let items: ListItem[] = []
+    let items: UnformattedListItem[] = []
     let list = commandManager.commandList
     let { titles } = commandManager
     let mruList = await this.mru.load()
-    for (let key of titles.keys()) {
+    for (const o of list) {
+      const { id } = o
       items.push({
-        label: `${key}\t${titles.get(key)}`,
-        filterText: key,
-        data: { cmd: key, score: score(mruList, key) }
+        label: [id, ...(titles.get(id) ? [titles.get(id)] : [])],
+        filterText: id,
+        data: { cmd: id, score: score(mruList, id) }
       })
     }
-    for (let o of list) {
-      let { id } = o
-      if (!titles.has(id)) {
-        items.push({
-          label: id,
-          filterText: id,
-          data: { cmd: id, score: score(mruList, id) }
-        })
-      }
-    }
-    items.sort((a, b) => {
-      return b.data.score - a.data.score
-    })
-    return items
+    items.sort((a, b) => b.data.score - a.data.score)
+    return formatListItems(this.alignColumns, items)
   }
 
   public doHighlight(): void {

@@ -1,55 +1,34 @@
-import { Neovim } from '@chemzqm/neovim'
 import { exec, ExecOptions } from 'child_process'
 import debounce from 'debounce'
 import fs from 'fs'
 import isuri from 'isuri'
-import mkdir from 'mkdirp'
 import path from 'path'
-import { Disposable, TextDocumentIdentifier } from 'vscode-languageserver-protocol'
+import { Disposable } from 'vscode-languageserver-protocol'
 import { URI } from 'vscode-uri'
 import which from 'which'
 import { MapMode } from '../types'
 import * as platform from './platform'
-import { Lazy } from './lazy'
-
 export { platform }
 const logger = require('./logger')('util-index')
-const prefix = '[coc.nvim] '
 
-export { Lazy }
+export const CONFIG_FILE_NAME = 'coc-settings.json'
 
 export function escapeSingleQuote(str: string): string {
   return str.replace(/'/g, "''")
 }
 
-export function echoErr(nvim: Neovim, msg: string): void {
-  echoMsg(nvim, prefix + msg, 'Error') // tslint:disable-line
-}
-
-export function echoWarning(nvim: Neovim, msg: string): void {
-  echoMsg(nvim, prefix + msg, 'WarningMsg') // tslint:disable-line
-}
-
-export function echoMessage(nvim: Neovim, msg: string): void {
-  echoMsg(nvim, prefix + msg, 'MoreMsg') // tslint:disable-line
-}
-
 export function wait(ms: number): Promise<any> {
   return new Promise(resolve => {
     setTimeout(() => {
-      resolve()
+      resolve(undefined)
     }, ms)
   })
 }
 
-function echoMsg(nvim: Neovim, msg: string, hl: string): void {
-  let method = process.env.VIM_NODE_RPC == '1' ? 'callTimer' : 'call'
-  nvim[method]('coc#util#echo_messages', [hl, msg.split('\n')], true)
-}
-
 export function getUri(fullpath: string, id: number, buftype: string, isCygwin: boolean): string {
   if (!fullpath) return `untitled:${id}`
-  if (platform.isWindows && !isCygwin) fullpath = path.win32.normalize(fullpath)
+  // https://github.com/neoclide/coc-java/issues/82
+  if (platform.isWindows && !isCygwin && !fullpath.startsWith('jdt://')) fullpath = path.win32.normalize(fullpath)
   if (path.isAbsolute(fullpath)) return URI.file(fullpath).toString()
   if (isuri.isValid(fullpath)) return URI.parse(fullpath).toString()
   if (buftype != '') return `${buftype}:${id}`
@@ -78,6 +57,7 @@ export function runCommand(cmd: string, opts: ExecOptions = {}, timeout?: number
   if (!platform.isWindows) {
     opts.shell = opts.shell || process.env.SHELL
   }
+  opts.maxBuffer = 500 * 1024
   return new Promise<string>((resolve, reject) => {
     let timer: NodeJS.Timer
     if (timeout) {
@@ -107,11 +87,12 @@ export function watchFile(filepath: string, onChange: () => void): Disposable {
       callback()
     })
     return Disposable.create(() => {
+      callback.clear()
       watcher.close()
     })
   } catch (e) {
     return Disposable.create(() => {
-      // noop
+      callback.clear()
     })
   }
 }
@@ -127,45 +108,33 @@ export function isRunning(pid: number): boolean {
 }
 
 export function getKeymapModifier(mode: MapMode): string {
-  if (mode == 'o' || mode == 'x' || mode == 'v') return '<C-U>'
-  if (mode == 'n') return ''
+  if (mode == 'n' || mode == 'o' || mode == 'x' || mode == 'v') return '<C-U>'
   if (mode == 'i') return '<C-o>'
   if (mode == 's') return '<Esc>'
   return ''
 }
 
-export async function mkdirp(path: string, mode?: number): Promise<boolean> {
+export function concurrent<T>(arr: T[], fn: (val: T) => Promise<void>, limit = 3): Promise<void> {
+  if (arr.length == 0) return Promise.resolve()
+  let finished = 0
+  let total = arr.length
+  let remain = arr.slice()
   return new Promise(resolve => {
-    mkdir(path, { mode }, err => {
-      if (err) return resolve(false)
-      resolve(true)
-    })
-  })
-}
-
-// consider textDocument without version to be valid
-export function isDocumentEdit(edit: any): boolean {
-  if (edit == null) return false
-  if (!TextDocumentIdentifier.is(edit.textDocument)) return false
-  if (!Array.isArray(edit.edits)) return false
-  return true
-}
-
-export function concurrent(fns: (() => Promise<any>)[], limit = Infinity): Promise<any[]> {
-  if (fns.length == 0) return Promise.resolve([])
-  return new Promise((resolve, rejrect) => {
-    let remain = fns.slice()
-    let results = []
-    let next = () => {
-      if (remain.length == 0) {
-        return resolve(results)
+    let run = (val): void => {
+      let cb = () => {
+        finished = finished + 1
+        if (finished == total) {
+          resolve()
+        } else if (remain.length) {
+          let next = remain.shift()
+          run(next)
+        }
       }
-      let list = remain.splice(0, limit)
-      Promise.all(list.map(fn => fn())).then(res => {
-        results.push(...res)
-        next()
-      }, rejrect)
+      fn(val).then(cb, cb)
     }
-    next()
+    for (let i = 0; i < Math.min(limit, remain.length); i++) {
+      let val = remain.shift()
+      run(val)
+    }
   })
 }

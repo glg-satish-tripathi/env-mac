@@ -1,7 +1,8 @@
-import { CancellationToken, Disposable, DocumentSelector, FormattingOptions, TextDocument, TextEdit } from 'vscode-languageserver-protocol'
+import { CancellationToken, Disposable, DocumentSelector, FormattingOptions, TextEdit } from 'vscode-languageserver-protocol'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import { DocumentFormattingEditProvider } from './index'
 import Manager, { ProviderItem } from './manager'
-import uuid = require('uuid/v4')
+import { v4 as uuid } from 'uuid'
 
 export default class FormatManager extends Manager<DocumentFormattingEditProvider> implements Disposable {
 
@@ -18,6 +19,10 @@ export default class FormatManager extends Manager<DocumentFormattingEditProvide
     return Disposable.create(() => {
       this.providers.delete(item)
     })
+  }
+
+  public handles(doc: TextDocument): boolean {
+    return this.getProvider(doc) != null
   }
 
   public async provideDocumentFormattingEdits(

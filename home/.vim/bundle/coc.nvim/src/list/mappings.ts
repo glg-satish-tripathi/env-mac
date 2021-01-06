@@ -1,7 +1,7 @@
 import { Neovim } from '@chemzqm/neovim'
 import { ListMode } from '../types'
 import '../util/extensions'
-import workspace from '../workspace'
+import window from '../window'
 import ListConfiguration, { validKeys } from './configuration'
 import { ListManager } from './manager'
 const logger = require('../util/logger')('list-mappings')
@@ -21,33 +21,29 @@ export default class Mappings {
       prompt.removeTail()
     })
     this.add('insert', '<C-n>', () => {
-      manager.history.next()
+      manager.session?.history.next()
     })
     this.add('insert', '<C-p>', () => {
-      manager.history.previous()
+      manager.session?.history.previous()
     })
-    this.add('insert', '<C-s>', () => {
-      return manager.switchMatcher()
+    this.add('insert', '<C-v>', async () => {
+      await prompt.paste()
     })
+    this.add('insert', '<C-s>', () => manager.switchMatcher())
     this.add('insert', ['<C-m>', '<cr>'], async () => {
       await manager.doAction()
     })
-    this.add('insert', ['<tab>', '<C-i>', '\t'], () => {
-      return manager.chooseAction()
-    })
+    this.add('insert', ['<tab>', '<C-i>', '\t'], () => manager.chooseAction())
     this.add('insert', '<C-o>', () => {
       manager.toggleMode()
     })
-    this.add('insert', '<C-c>', async () => {
+    this.add('insert', '<C-c>', () => {
       manager.stop()
-      manager.prompt.start()
       return
     })
-    this.add('insert', '<esc>', () => {
-      return manager.cancel()
-    })
+    this.add('insert', '<esc>', () => manager.cancel())
     this.add('insert', '<C-l>', async () => {
-      await manager.worker.loadItems(true)
+      await manager.session?.reloadItems()
     })
     this.add('insert', '<left>', () => {
       prompt.moveLeft()
@@ -61,7 +57,7 @@ export default class Mappings {
     this.add('insert', ['<home>', '<C-a>'], () => {
       prompt.moveToStart()
     })
-    this.add('insert', ['<C-h>', '<bs>'], () => {
+    this.add('insert', ['<C-h>', '<bs>', '<backspace>'], () => {
       prompt.onBackspace()
     })
     this.add('insert', '<C-w>', () => {
@@ -70,24 +66,12 @@ export default class Mappings {
     this.add('insert', '<C-u>', () => {
       prompt.removeAhead()
     })
-    this.add('insert', '<C-r>', () => {
-      return prompt.insertRegister()
-    })
-    this.add('insert', '<C-d>', () => {
-      return manager.feedkeys('<C-d>', false)
-    })
-    this.add('insert', '<PageUp>', () => {
-      return manager.feedkeys('<PageUp>', false)
-    })
-    this.add('insert', '<PageDown>', () => {
-      return manager.feedkeys('<PageDown>', false)
-    })
-    this.add('insert', '<down>', () => {
-      return manager.normal('j')
-    })
-    this.add('insert', '<up>', () => {
-      return manager.normal('k')
-    })
+    this.add('insert', '<C-r>', () => prompt.insertRegister())
+    this.add('insert', '<C-d>', () => manager.feedkeys('<C-d>', false))
+    this.add('insert', '<PageUp>', () => manager.feedkeys('<PageUp>', false))
+    this.add('insert', '<PageDown>', () => manager.feedkeys('<PageDown>', false))
+    this.add('insert', '<down>', () => manager.normal('j'))
+    this.add('insert', '<up>', () => manager.normal('k'))
     this.add('insert', ['<ScrollWheelUp>'], this.doScroll.bind(this, '<ScrollWheelUp>'))
     this.add('insert', ['<ScrollWheelDown>'], this.doScroll.bind(this, '<ScrollWheelDown>'))
     this.add('insert', ['<C-f>'], this.doScroll.bind(this, '<C-f>'))
@@ -96,64 +80,41 @@ export default class Mappings {
     this.add('normal', '<C-o>', () => {
       // do nothing, avoid buffer switch by accident
     })
-    this.add('normal', 't', () => {
-      return manager.doAction('tabe')
-    })
-    this.add('normal', 's', () => {
-      return manager.doAction('split')
-    })
-    this.add('normal', 'd', () => {
-      return manager.doAction('drop')
-    })
-    this.add('normal', ['<cr>', '<C-m>', '\r'], () => {
-      return manager.doAction()
-    })
-    this.add('normal', '<C-a>', () => {
-      return manager.ui.selectAll()
-    })
-    this.add('normal', ' ', () => {
-      return manager.ui.toggleSelection()
-    })
-    this.add('normal', 'p', () => {
-      return manager.togglePreview()
-    })
-    this.add('normal', ['<tab>', '\t', '<C-i>'], () => {
-      return manager.chooseAction()
-    })
+    this.add('normal', 't', () => manager.doAction('tabe'))
+    this.add('normal', 's', () => manager.doAction('split'))
+    this.add('normal', 'd', () => manager.doAction('drop'))
+    this.add('normal', ['<cr>', '<C-m>', '\r'], () => manager.doAction())
+    this.add('normal', '<C-a>', () => manager.session?.ui.selectAll())
+    this.add('normal', ' ', () => manager.session?.ui.toggleSelection())
+    this.add('normal', 'p', () => manager.togglePreview())
+    this.add('normal', ['<tab>', '\t', '<C-i>'], () => manager.chooseAction())
     this.add('normal', '<C-c>', () => {
       manager.stop()
     })
-    this.add('normal', '<esc>', () => {
-      return manager.cancel()
-    })
-    this.add('normal', '<C-l>', () => {
-      return manager.worker.loadItems(true)
-    })
-    this.add('normal', ['i', 'I', 'o', 'O', 'a', 'A'], () => {
-      return manager.toggleMode()
-    })
-    this.add('normal', '?', () => {
-      return manager.showHelp()
-    })
+    this.add('normal', '<esc>', () => manager.cancel())
+    this.add('normal', '<C-l>', () => manager.session?.reloadItems())
+    this.add('normal', '<C-o>', () => manager.session?.jumpBack())
+    this.add('normal', '<C-e>', () => this.scrollPreview('down'))
+    this.add('normal', '<C-y>', () => this.scrollPreview('up'))
+    this.add('normal', ['i', 'I', 'o', 'O', 'a', 'A'], () => manager.toggleMode())
+    this.add('normal', '?', () => manager.session?.showHelp())
     this.add('normal', ':', async () => {
       await manager.cancel(false)
       await nvim.eval('feedkeys(":")')
     })
     this.add('normal', ['<ScrollWheelUp>'], this.doScroll.bind(this, '<ScrollWheelUp>'))
     this.add('normal', ['<ScrollWheelDown>'], this.doScroll.bind(this, '<ScrollWheelDown>'))
-    let insertMappings = this.manager.getConfig<any>('insertMappings', {})
-    this.userInsertMappings = this.fixUserMappings(insertMappings)
-    let normalMappings = this.manager.getConfig<any>('normalMappings', {})
-    this.userNormalMappings = this.fixUserMappings(normalMappings)
-    workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('list')) {
-        let config = workspace.getConfiguration('list')
-        let insertMappings = config.get<any>('insertMappings', {})
-        this.userInsertMappings = this.fixUserMappings(insertMappings)
-        let normalMappings = config.get<any>('normalMappings', {})
-        this.userNormalMappings = this.fixUserMappings(normalMappings)
-      }
+    this.createMappings()
+    config.on('change', () => {
+      this.createMappings()
     })
+  }
+
+  private createMappings(): void {
+    let insertMappings = this.config.get<any>('insertMappings', {})
+    this.userInsertMappings = this.fixUserMappings(insertMappings)
+    let normalMappings = this.config.get<any>('normalMappings', {})
+    this.userNormalMappings = this.fixUserMappings(normalMappings)
   }
 
   private fixUserMappings(mappings: { [key: string]: string }): Map<string, string> {
@@ -162,11 +123,14 @@ export default class Mappings {
       if (key.length == 1) {
         res.set(key, value)
       } else if (key.startsWith('<') && key.endsWith('>')) {
-        if (validKeys.indexOf(key) != -1) {
+        if (key.toLowerCase() == '<space>') {
+          res.set(' ', value)
+        } else if (key.toLowerCase() == '<backspace>') {
+          res.set('<bs>', value)
+        } else if (validKeys.includes(key)) {
           res.set(key, value)
         } else {
           let find = false
-          // tslint:disable-next-line: prefer-for-of
           for (let i = 0; i < validKeys.length; i++) {
             if (validKeys[i].toLowerCase() == key.toLowerCase()) {
               find = true
@@ -174,11 +138,10 @@ export default class Mappings {
               break
             }
           }
-          if (!find) workspace.showMessage(`Invalid mappings key: ${key}`, 'error')
+          if (!find) window.showMessage(`Invalid list mappings key configuration: "${key}"`, 'warning')
         }
       } else {
-        // tslint:disable-next-line: no-console
-        workspace.showMessage(`Invalid mappings key: ${key}`, 'error')
+        window.showMessage(`Invalid list mappings key configuration: "${key}"`, 'warning')
       }
     }
     return res
@@ -187,12 +150,14 @@ export default class Mappings {
   public async doInsertKeymap(key: string): Promise<boolean> {
     let nextKey = this.config.nextKey
     let previousKey = this.config.previousKey
+    let { session } = this.manager
+    if (!session) return
     if (key == nextKey) {
-      await this.manager.normal('j')
+      session.ui.index = session.ui.index + 1
       return true
     }
     if (key == previousKey) {
-      await this.manager.normal('k')
+      session.ui.index = session.ui.index - 1
       return true
     }
     let expr = this.userInsertMappings.get(key)
@@ -235,35 +200,35 @@ export default class Mappings {
 
   private async onError(msg: string): Promise<void> {
     let { nvim } = this
-    await nvim.call('coc#list#stop_prompt', [])
-    workspace.showMessage(msg, 'error')
+    await nvim.call('coc#prompt#stop_prompt', ['list'])
+    window.showMessage(msg, 'error')
     this.manager.prompt.start()
   }
 
   private async evalExpression(expr: string, _mode: string): Promise<void> {
-    if (typeof expr != 'string' || expr.indexOf(':') == -1) {
-      await this.onError(`Invalid expression ${expr}`)
+    if (typeof expr != 'string' || !expr.includes(':')) {
+      await this.onError(`Invalid list mapping expression: ${expr}`)
       return
     }
     let { manager } = this
     let { prompt } = manager
     let [key, action] = expr.split(':', 2)
     if (key == 'do') {
-      switch (action) {
+      switch (action.toLowerCase()) {
         case 'switch':
-          await manager.switchMatcher()
+          manager.switchMatcher()
           return
         case 'selectall':
-          await manager.ui.selectAll()
+          await manager.session?.ui.selectAll()
           return
         case 'help':
-          await manager.showHelp()
+          await manager.session?.showHelp()
           return
         case 'refresh':
-          await manager.worker.loadItems()
+          await manager.session?.reloadItems()
           return
         case 'exit':
-          await manager.cancel(true)
+          await manager.cancel()
           return
         case 'stop':
           manager.stop()
@@ -272,7 +237,10 @@ export default class Mappings {
           await manager.cancel(false)
           return
         case 'toggle':
-          await manager.ui.toggleSelection()
+          await manager.session?.ui.toggleSelection()
+          return
+        case 'jumpback':
+          manager.session?.jumpBack()
           return
         case 'previous':
           await manager.normal('k')
@@ -283,18 +251,22 @@ export default class Mappings {
         case 'defaultaction':
           await manager.doAction()
           return
-        case 'toggleMode':
+        case 'togglemode':
           return manager.toggleMode()
+        case 'previewup':
+          return this.scrollPreview('up')
+        case 'previewdown':
+          return this.scrollPreview('down')
         default:
           await this.onError(`'${action}' not supported`)
       }
     } else if (key == 'prompt') {
       switch (action) {
         case 'previous':
-          manager.history.previous()
+          manager.session?.history.previous()
           return
         case 'next':
-          manager.history.next()
+          manager.session?.history.next()
           return
         case 'start':
           return prompt.moveToStart()
@@ -313,7 +285,7 @@ export default class Mappings {
         case 'removeahead':
           return prompt.removeAhead()
         case 'insertregister':
-          await prompt.insertRegister()
+          prompt.insertRegister()
           return
         case 'paste':
           await prompt.paste()
@@ -345,5 +317,13 @@ export default class Mappings {
 
   private async doScroll(key: string): Promise<void> {
     await this.manager.feedkeys(key)
+  }
+
+  private async scrollPreview(dir: 'up' | 'down'): Promise<void> {
+    let { nvim } = this
+    nvim.pauseNotification()
+    nvim.call('coc#util#scroll_preview', [dir], true)
+    nvim.command('redraw', true)
+    await nvim.resumeNotification()
   }
 }
