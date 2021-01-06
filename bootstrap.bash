@@ -50,6 +50,10 @@ rsync \
   "./home/" \
   "${HOME}"
 
+pushd "${HOME}/.vim/bundle/coc.nvim"
+npm install
+popd
+
 for FILE in bashrc/*.bash; do
   FILE_NAME="$(basename "${FILE}")"
   # remove section in .bashrc ( eg. #:somefile.bash:[+-] )
