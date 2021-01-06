@@ -1,4 +1,4 @@
 set tabstop=2
-set expandtab
+set noexpandtab
 set shiftwidth=2
 set softtabstop=2
