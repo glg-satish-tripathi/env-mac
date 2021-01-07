@@ -50,3 +50,4 @@ sudo -Hu ubuntu bash -c "cd && cd env-ubuntu && ./bootstrap.bash"
     - change all the `jp.archive...` references to `archive...`
 - EC2 instance initalization logs
   - `→ aws ec2 --output text get-console-output --instance-id i-00000000000000000 --latest`
+- https://github.com/github/super-linter/blob/master/docs/run-linter-locally.md
