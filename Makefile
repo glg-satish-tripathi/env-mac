@@ -21,3 +21,15 @@ lint:
 		-e FILTER_REGEX_EXCLUDE='home/.vim/bundle/.*' \
 		-v $(shell pwd):/tmp/lint \
 		github/super-linter
+
+lint_one:
+ifdef file
+	docker pull github/super-linter:latest
+	docker run \
+		-e RUN_LOCAL=true \
+		-e FILTER_REGEX_EXCLUDE='home/.vim/bundle/.*' \
+		-v $(shell pwd)/$(file):/tmp/lint/$(file) \
+		github/super-linter
+else
+	@echo No file provided
+endif

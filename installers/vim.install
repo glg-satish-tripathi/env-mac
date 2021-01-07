@@ -21,7 +21,7 @@ sudo apt-get --yes install \
   lua5.1-dev \
   libperl-dev
 git clone https://github.com/vim/vim.git
-cd vim
+cd vim || exit
 git checkout "$(git tag | tail -n1)"
 ./configure --with-features=huge
 make

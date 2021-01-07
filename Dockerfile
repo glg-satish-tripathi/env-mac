@@ -8,6 +8,9 @@ RUN apt-get --yes update \
 && rm -rf /var/lib/apt/lists/*
 
 # packages that are required or just helpful for a dev env
+# disable warning since it was incorrectly detecting sudo use
+
+# hadolint ignore=DL3004
 RUN add-apt-repository --yes ppa:git-core/ppa \
 && apt-get --yes update \
 && apt-get --yes install \
