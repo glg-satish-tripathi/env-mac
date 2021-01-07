@@ -4,7 +4,6 @@ source "$(dirname "$(readlink -e -- "$0")")/core.source"
 
 sudo apt-get --yes remove vim || true
 sudo apt-get --yes remove vi || true
-sudo apt-get --yes remove vim.tiny || true
 
 sudo apt-get --yes update
 sudo apt-get --yes install \

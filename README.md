@@ -48,3 +48,5 @@ sudo -Hu ubuntu bash -c "cd && cd env-ubuntu && ./bootstrap.bash"
   - local mirror issue
     - `sudo vim /etc/apt/sources.list`
     - change all the `jp.archive...` references to `archive...`
+- EC2 instance initalization logs
+  - `→ aws ec2 --output text get-console-output --instance-id i-00000000000000000 --latest`

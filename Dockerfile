@@ -18,11 +18,6 @@ wget \
 rsync \
 && rm -rf /var/lib/apt/lists/*
 
-# install node, since some apps down the road will depend on it
-RUN set -o pipefail \
-&& curl -sL https://deb.nodesource.com/setup_14.x | bash - \
-&& apt-get install -y nodejs
-
 # add ubuntu user, whic his pretty standard on most setups
 RUN useradd -ms /bin/bash ubuntu
 # allow ubuntu to sudo w/o password for everything
