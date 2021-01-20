@@ -4,10 +4,14 @@ source "$(dirname "$(readlink -e -- "$0")")/core.source"
 
 VERSION="${1:-0.12.26}"
 TARGET="/usr/local/bin/terraform"
+ARCHITECTURE="$(dpkg --print-architecture)"
 
 wget \
   --quiet \
-  "https://releases.hashicorp.com/terraform/${VERSION}/terraform_${VERSION}_linux_amd64.zip"
+  "$(printf '%s' \
+  "https://releases.hashicorp.com/terraform" \
+  "/${VERSION}/terraform_${VERSION}_linux_${ARCHITECTURE}.zip" \
+  )"
 unzip terraform_*.zip
 sudo mv "terraform" "${TARGET}"
 sudo ln --symbolic --force "${TARGET}" "/usr/local/bin/tf"
