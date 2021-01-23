@@ -36,7 +36,7 @@ mkdir -p "${CACHE_DIR}"
 DONE="${CACHE_DIR}/${SCRIPT_BASE}.done"
 
 # if app was successfully installed it is skipped on re-runs
-if [[ "$1" == "--force" ]]; then
+if [[ "${1:-}" == "--force" ]]; then
   shift
 elif [[ -f "${DONE}" ]]; then
   echo ":: ${SCRIPT_BASE}:${PID} skip"

@@ -20,7 +20,7 @@ sudo apt-get --yes install \
   lua5.1 \
   lua5.1-dev \
   libperl-dev
-git clone https://github.com/vim/vim.git
+git clone "https://github.com/vim/vim.git"
 cd vim || exit
 git checkout "$(git tag | tail -n1)"
 ./configure --with-features=huge
