@@ -12,3 +12,5 @@ wget \
 sudo mv "magick" "${TARGET}"
 sudo chmod 755 "${TARGET}"
 sudo ln --symbolic --force "${TARGET}" "/usr/local/bin/im"
+# add in support to conver to webp
+sudo apt-get --yes libwebp-dev webp
