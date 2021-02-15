@@ -1,4 +1,7 @@
 set nocompatible              " be iMproved, required
+
+let g:polyglot_disabled = ['hcl']
+
 execute pathogen#infect()
 syntax on
 filetype plugin indent on
@@ -268,3 +271,5 @@ vnoremap < <gv
 "augroup END
 autocmd BufRead,BufNewFile Dockerfile.*,Dockerfile-* set filetype=dockerfile
 
+autocmd BufNewFile,BufRead *.nomad     set filetype=terraform
+let g:vim_jsx_pretty_colorful_config = 1
