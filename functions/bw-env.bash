@@ -40,19 +40,29 @@ while IFS=$'\n\t' read -r LINE; do
 done < <(bw list items \
 	--folderid "${FOLDER_ID}" \
 	| jq -rM --from-file <(cat <<- DOC
+		# loop through the items
 		map(
+			# ignore any item w/o .fields
 			select(.fields)
+			# create a new object with .id and .name
 			| {id: .id, name: .name}
+			# combine it with the array of fields turned into key/values
 				+ (
 						.fields | from_entries
 					)
+			# only use type=env objects
 			| select(.type == "env")
+			# match the name based on all passed in arguments
 			| select(.name == "$@")
+			# delete any of the non-env var fields
 			| del(.type, .id, .name)
 		)
+		# take only the objects from the array
 		| .[]
+		# turn the object into an array of key:value objects
 		| to_entries
-		| map("\(.key)=\"\(.value)\"")[]
+		# create a string usable in an "export" command
+		| map("\(.key)=\(.value)")[]
 DOC
 ))
 }
