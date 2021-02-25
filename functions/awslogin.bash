@@ -1,6 +1,8 @@
+# obtain AWS env vars related to an access key
+# get AWS MFA device
+# fetch 2FA token via the AWS_BW_TOTP related BW login
+# auth with AWS MFA device to obtain fully authed temp creds
 function awslogin {
-  #unset -v AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_REGION
-
   local BW_LOOKUP="${1:?missing bitwarden token}"
   local AWS_MFA_TOKEN
 
