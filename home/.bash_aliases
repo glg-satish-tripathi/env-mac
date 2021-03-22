@@ -50,7 +50,6 @@ alias recolor="source $HOME/.config/base16-shell/base16-default.dark.sh"
 
 alias k=kubectl
 
-alias gitroot=$'cd $(git rev-parse --show-toplevel)'
 alias tfver="${HOME}/env-ubuntu/installers/terraform-cli.install"
 which bat > /dev/null || alias bat='batcat'
 
