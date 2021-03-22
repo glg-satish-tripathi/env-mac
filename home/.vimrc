@@ -2,7 +2,6 @@ set nocompatible              " be iMproved, required
 
 let g:polyglot_disabled = ['hcl']
 
-execute pathogen#infect()
 syntax on
 filetype plugin indent on
 
@@ -60,7 +59,13 @@ nnoremap <Leader>m :w <BAR> !lessc % > %:p:r.css<CR><space>
 
 let g:is_bash=1
 
-map <F7> mzgg=G`z<CR>
+nnoremap <F7> mzgg=G'z
+inoremap <F7> <ESC>mzgg=G'z
+
+nnoremap <F4> :%!jq --tab .<CR>
+
+inoremap <silent> <PageUp> <ESC><PageUp>
+inoremap <silent> <PageDown> <ESC><PageDown>
 
 function! ClearUndo()
 	let choice = confirm("Clear undo information?", "&Yes\n&No", 2)
@@ -273,3 +278,5 @@ autocmd BufRead,BufNewFile Dockerfile.*,Dockerfile-* set filetype=dockerfile
 
 autocmd BufNewFile,BufRead *.nomad     set filetype=terraform
 let g:vim_jsx_pretty_colorful_config = 1
+let g:indentLine_fileTypeExclude = [ "json" ]
+let g:vim_json_syntax_conceal=1
