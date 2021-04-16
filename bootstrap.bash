@@ -56,7 +56,7 @@ rsync \
   "${HOME}"
 
 # vim specific stuff
-pushd "${HOME}/.vim/bundle/coc.nvim"
+pushd "${HOME}/.vim/pack/datfinesoul/start/coc.nvim"
 npm install
 popd
 
