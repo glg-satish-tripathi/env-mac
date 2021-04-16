@@ -9,7 +9,7 @@ endif
 
 " Reload the definition of g:vim_json_syntax_conceal
 " see https://github.com/elzr/vim-json/issues/42
-runtime! ftplugin/json.vim
+"runtime! ftplugin/json.vim
 
 if !exists("main_syntax")
   if version < 600
