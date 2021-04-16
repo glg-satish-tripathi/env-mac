@@ -66,9 +66,6 @@ endfun
 
 au VimEnter * call PolyglotVerify()
 
-" Be consistent across different systems
-set nofileignorecase
-
 function! s:SetDefault(name, value)
   if !exists(a:name)
     let {a:name} = a:value
@@ -167,6 +164,10 @@ let did_load_filetypes = 1
 
 
 " DO NOT EDIT CODE BELOW, IT IS GENERATED WITH MAKEFILE
+
+if !has_key(g:polyglot_is_disabled, 'sway')
+  au BufNewFile,BufRead *sway/config setf sway
+endif
 
 if !has_key(g:polyglot_is_disabled, 'hjson')
   au BufNewFile,BufRead *.hjson setf hjson
@@ -1321,7 +1322,7 @@ endif
 
 if !has_key(g:polyglot_is_disabled, 'html')
   au BufNewFile,BufRead,BufWritePost *.html call polyglot#detect#Html()
-  au BufNewFile,BufRead *.htm,*.html.hl,*.inc,*.st,*.xht,*.xhtml setf html
+  au BufNewFile,BufRead *.htm,*.html.hl,*.inc,*.xht,*.xhtml setf html
 endif
 
 if !has_key(g:polyglot_is_disabled, 'hollywood')
@@ -2000,7 +2001,7 @@ if !has_key(g:polyglot_is_disabled, 'rspec')
 endif
 
 if !has_key(g:polyglot_is_disabled, 'ruby')
-  au BufNewFile,BufRead *.axlsx,*.builder,*.cap,*.eye,*.fcgi,*.gemspec,*.god,*.jbuilder,*.mspec,*.opal,*.pluginspec,*.podspec,*.rabl,*.rake,*.rant,*.rb,*.rbi,*.rbuild,*.rbw,*.rbx,*.rjs,*.ru,*.ruby,*.rxml,*.spec,*.thor,*.watchr,{.,}Brewfile,{.,}Guardfile,{.,}autotest,{.,}irbrc,{.,}pryrc,{.,}simplecov,Appraisals,Berksfile,Buildfile,Capfile,Cheffile,Dangerfile,Deliverfile,Fastfile,Gemfile,Gemfile.lock,Guardfile,Jarfile,KitchenSink,Mavenfile,Podfile,Puppetfile,Rakefile,Routefile,Snapfile,Thorfile,Vagrantfile,[Rr]antfile,buildfile,vagrantfile setf ruby
+  au BufNewFile,BufRead *.axlsx,*.builder,*.cap,*.eye,*.fcgi,*.gemspec,*.god,*.jbuilder,*.mspec,*.opal,*.pluginspec,*.podspec,*.prawn,*.rabl,*.rake,*.rant,*.rb,*.rbi,*.rbuild,*.rbw,*.rbx,*.rjs,*.ru,*.ruby,*.rxml,*.spec,*.thor,*.watchr,{.,}Brewfile,{.,}Guardfile,{.,}autotest,{.,}irbrc,{.,}pryrc,{.,}simplecov,Appraisals,Berksfile,Buildfile,Capfile,Cheffile,Dangerfile,Deliverfile,Fastfile,Gemfile,Guardfile,Jarfile,KitchenSink,Mavenfile,Podfile,Puppetfile,Rakefile,Routefile,Snapfile,Thorfile,Vagrantfile,[Rr]antfile,buildfile,vagrantfile setf ruby
   au BufNewFile,BufRead [Rr]akefile* call s:StarSetf('ruby')
   au BufNewFile,BufRead *.erb,*.erb.deface,*.rhtml setf eruby
 endif
@@ -2257,7 +2258,7 @@ if !has_key(g:polyglot_is_disabled, 'jq')
 endif
 
 if !has_key(g:polyglot_is_disabled, 'htmldjango')
-  au BufNewFile,BufRead *.j2,*.jinja,*.jinja2,*.njk setf htmldjango
+  au BufNewFile,BufRead *.j2,*.jinja,*.jinja2 setf htmldjango
 endif
 
 if !has_key(g:polyglot_is_disabled, 'jenkins')
@@ -2473,7 +2474,7 @@ if !has_key(g:polyglot_is_disabled, 'coffee-script')
 endif
 
 if !has_key(g:polyglot_is_disabled, 'markdown')
-  au BufNewFile,BufRead *.markdown,*.md,*.mdown,*.mdwn,*.mkd,*.mkdn,*.mkdown,*.ronn,*.workbook,contents.lr setf markdown
+  au BufNewFile,BufRead *.markdown,*.md,*.mdown,*.mdwn,*.mkd,*.mkdn,*.mkdown,*.ronn,*.scd,*.workbook,contents.lr setf markdown
 endif
 
 if !has_key(g:polyglot_is_disabled, 'cmake')
@@ -2592,7 +2593,7 @@ if !has_key(g:polyglot_is_disabled, 'ant')
 endif
 
 if !has_key(g:polyglot_is_disabled, 'xml')
-  au BufNewFile,BufRead *.adml,*.admx,*.ant,*.axml,*.builds,*.ccproj,*.ccxml,*.cdxml,*.clixml,*.cproject,*.cscfg,*.csdef,*.csl,*.csproj,*.csproj.user,*.ct,*.depproj,*.dita,*.ditamap,*.ditaval,*.dll.config,*.dotsettings,*.filters,*.fsproj,*.fxml,*.glade,*.gml,*.gmx,*.grxml,*.gst,*.iml,*.ivy,*.jelly,*.jsproj,*.kml,*.launch,*.mdpolicy,*.mjml,*.mm,*.mod,*.mxml,*.natvis,*.ncl,*.ndproj,*.nproj,*.nuspec,*.odd,*.osm,*.pkgproj,*.pluginspec,*.proj,*.props,*.psc1,*.pt,*.rdf,*.res,*.resx,*.rss,*.sch,*.scxml,*.sfproj,*.shproj,*.srdf,*.storyboard,*.sublime-snippet,*.targets,*.tml,*.tpm,*.ui,*.urdf,*.ux,*.vbproj,*.vcxproj,*.vsixmanifest,*.vssettings,*.vstemplate,*.vxml,*.wixproj,*.workflow,*.wpl,*.wsdl,*.wsf,*.wxi,*.wxl,*.wxs,*.x3d,*.xacro,*.xaml,*.xib,*.xlf,*.xliff,*.xmi,*.xml,*.xml.dist,*.xproj,*.xsd,*.xspec,*.xul,*.zcml,*/etc/blkid.tab,*/etc/blkid.tab.old,*/etc/xdg/menus/*.menu,*fglrxrc,{.,}classpath,{.,}cproject,{.,}project,App.config,NuGet.config,Settings.StyleCop,Web.Debug.config,Web.Release.config,Web.config,packages.config setf xml
+  au BufNewFile,BufRead *.adml,*.admx,*.ant,*.axml,*.builds,*.ccproj,*.ccxml,*.cdxml,*.clixml,*.cproject,*.cscfg,*.csdef,*.csl,*.csproj,*.csproj.user,*.ct,*.depproj,*.dita,*.ditamap,*.ditaval,*.dll.config,*.dotsettings,*.filters,*.fsproj,*.fxml,*.glade,*.gml,*.gmx,*.grxml,*.gst,*.iml,*.ivy,*.jelly,*.jsproj,*.kml,*.launch,*.mdpolicy,*.mjml,*.mod,*.mxml,*.natvis,*.ncl,*.ndproj,*.nproj,*.nuspec,*.odd,*.osm,*.pkgproj,*.pluginspec,*.proj,*.props,*.psc1,*.pt,*.rdf,*.res,*.resx,*.rss,*.sch,*.scxml,*.sfproj,*.shproj,*.srdf,*.storyboard,*.sublime-snippet,*.targets,*.tml,*.tpm,*.ui,*.urdf,*.ux,*.vbproj,*.vcxproj,*.vsixmanifest,*.vssettings,*.vstemplate,*.vxml,*.wixproj,*.workflow,*.wpl,*.wsdl,*.wsf,*.wxi,*.wxl,*.wxs,*.x3d,*.xacro,*.xaml,*.xib,*.xlf,*.xliff,*.xmi,*.xml,*.xml.dist,*.xmp,*.xproj,*.xsd,*.xspec,*.xul,*.zcml,*/etc/blkid.tab,*/etc/blkid.tab.old,*/etc/xdg/menus/*.menu,*fglrxrc,{.,}classpath,{.,}cproject,{.,}project,App.config,NuGet.config,Settings.StyleCop,Web.Debug.config,Web.Release.config,Web.config,packages.config setf xml
 endif
 
 if !has_key(g:polyglot_is_disabled, 'csv')
@@ -3609,19 +3610,22 @@ func! s:process_rtp(rtp)
   " Then vim-polyglot
   call add(result, s:base)
   " Then all other files, until after-files
-  for path in rtp[i:len(rtp)-1]
+  while i < len(rtp)
+    let path = rtp[i]
     if match(path, '[/\\]after$') > -1
       break
     endif
     call add(result, path)
     let i = i + 1
-  endfor
+  endwhile
   " Then vim-polyglot after path
   call add(result, s:base . '/after')
   " Then all other after paths
-  for path in rtp[i:len(rtp)-1]
+  while i < len(rtp)
+    let path = rtp[i]
     call add(result, path)
-  endfor
+    let i = i + 1
+  endwhile
   " User's after directory is always last
   call add(result, a:rtp[len(a:rtp)-1])
   return result

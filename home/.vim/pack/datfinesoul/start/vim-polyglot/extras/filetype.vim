@@ -1,7 +1,7 @@
 " Vim support file to detect file types
 "
 " Maintainer:	Bram Moolenaar <Bram@vim.org>
-" Last Change:	2020 Dec 24
+" Last Change:	2021 Apr 05
 
 " Listen very carefully, I will say this only once
 if exists("did_load_filetypes")
@@ -168,6 +168,9 @@ au BufNewFile,BufRead *.mar			setf vmasm
 " Atlas
 au BufNewFile,BufRead *.atl,*.as		setf atlas
 
+" Atom is based on XML
+au BufNewFile,BufRead *.atom			setf xml
+
 " Autoit v3
 au BufNewFile,BufRead *.au3			setf autoit
 
@@ -215,6 +218,9 @@ au BufNewFile,BufRead *.bc			setf bc
 
 " BDF font
 au BufNewFile,BufRead *.bdf			setf bdf
+
+" Beancount
+au BufNewFile,BufRead *.beancount		setf beancount
 
 " BibTeX bibliography database file
 au BufNewFile,BufRead *.bib			setf bib
@@ -588,6 +594,9 @@ au BufNewFile,BufRead *.fan,*.fwt		setf fan
 
 " Factor
 au BufNewFile,BufRead *.factor			setf factor
+
+" Fennel
+autocmd BufRead,BufNewFile *.fnl 		setf fennel
 
 " Fetchmail RC file
 au BufNewFile,BufRead .fetchmailrc		setf fetchmail
@@ -1173,9 +1182,10 @@ au BufNewFile,BufRead *.papp,*.pxml,*.pxsl	setf papp
 " Password file
 au BufNewFile,BufRead */etc/passwd,*/etc/passwd-,*/etc/passwd.edit,*/etc/shadow,*/etc/shadow-,*/etc/shadow.edit,*/var/backups/passwd.bak,*/var/backups/shadow.bak setf passwd
 
-" Pascal (also *.p)
+" Pascal (also *.p, *.pp, *.inc)
 au BufNewFile,BufRead *.pas			setf pascal
 
+" Pascal or Puppet manifest
 au BufNewFile,BufRead *.pp			call polyglot#ft#FTpp()
 
 " Delphi or Lazarus program file
@@ -1266,8 +1276,13 @@ au BufNewFile,BufRead *.pov			setf pov
 " Povray configuration
 au BufNewFile,BufRead .povrayrc			setf povini
 
-" Povray, PHP or assembly
+" Povray, Pascal, PHP or assembly
 au BufNewFile,BufRead *.inc			call polyglot#ft#FTinc()
+
+" PowerShell
+au BufNewFile,BufRead	*.ps1,*.psd1,*.psm1,*.pssc	setf ps1
+au BufNewFile,BufRead	*.ps1xml			setf ps1xml
+au BufNewFile,BufRead	*.cdxml,*.psc1			setf xml
 
 " Printcap and Termcap
 au BufNewFile,BufRead *printcap
@@ -1275,12 +1290,18 @@ au BufNewFile,BufRead *printcap
 au BufNewFile,BufRead *termcap
 	\ let b:ptcap_type = "term" | setf ptcap
 
-" PCCTS / ANTRL
-"au BufNewFile,BufRead *.g			setf antrl
+" PCCTS / ANTLR
+"au BufNewFile,BufRead *.g			setf antlr
 au BufNewFile,BufRead *.g			setf pccts
 
 " PPWizard
 au BufNewFile,BufRead *.it,*.ih			setf ppwiz
+
+" Puppet
+au BufNewFile,BufRead Puppetfile		setf ruby
+
+" Embedded Puppet
+au BufNewFile,BufRead *.epp			setf epuppet
 
 " Obj 3D file format
 " TODO: is there a way to avoid MS-Windows Object files?
@@ -1320,6 +1341,9 @@ au BufNewFile,BufRead *.pml			setf promela
 " Google protocol buffers
 au BufNewFile,BufRead *.proto			setf proto
 au BufNewFile,BufRead *.pbtxt			setf pbtxt
+
+" Poke
+au BufNewFile,BufRead *.pk      		setf poke
 
 " Protocols
 au BufNewFile,BufRead */etc/protocols		setf protocols
@@ -1378,6 +1402,9 @@ else
   au BufNewFile,BufRead *.rmd,*.smd			setf rmd
 endif
 
+" RSS looks like XML
+au BufNewFile,BufRead *.rss				setf xml
+
 " R reStructuredText file
 if has("fname_case")
   au BufNewFile,BufRead *.Rrst,*.rrst,*.Srst,*.srst	setf rrst
@@ -1424,8 +1451,8 @@ au BufNewFile,BufRead *.rb,*.rbw		setf ruby
 " RubyGems
 au BufNewFile,BufRead *.gemspec			setf ruby
 
-" Rust
-au BufNewFile,BufRead *.rs			setf rust
+" RBS (Ruby Signature)
+au BufNewFile,BufRead *.rbs			setf rbs
 
 " Rackup
 au BufNewFile,BufRead *.ru			setf ruby
@@ -1438,6 +1465,9 @@ au BufNewFile,BufRead *.builder,*.rxml,*.rjs	setf ruby
 
 " Rantfile and Rakefile is like Ruby
 au BufNewFile,BufRead [rR]antfile,*.rant,[rR]akefile,*.rake	setf ruby
+
+" Rust
+au BufNewFile,BufRead *.rs			setf rust
 
 " S-lang (or shader language, or SmallLisp)
 au BufNewFile,BufRead *.sl			setf slang
@@ -1474,6 +1504,9 @@ au BufNewFile,BufRead *.sdl,*.pr		setf sdl
 
 " sed
 au BufNewFile,BufRead *.sed			setf sed
+
+" svelte
+au BufNewFile,BufRead *.svelte			setf svelte
 
 " Sieve (RFC 3028, 5228)
 au BufNewFile,BufRead *.siv,*.sieve		setf sieve
@@ -1524,10 +1557,9 @@ au BufNewFile,BufRead catalog			setf catalog
 " Gentoo ebuilds, Arch Linux PKGBUILDs and Alpine Linux APKBUILDs are actually
 " bash scripts.
 " NOTE: Patterns ending in a star are further down, these have lower priority.
-au BufNewFile,BufRead .bashrc,bashrc,bash.bashrc,.bash[_-]profile,.bash[_-]logout,.bash[_-]aliases,bash-fc[-.],*.bash,*/{,.}bash[_-]completion{,.d,.sh}{,/*},*.ebuild,*.eclass,PKGBUILD,APKBUILD call polyglot#ft#SetFileTypeSH("bash")
+au BufNewFile,BufRead .bashrc,bashrc,bash.bashrc,.bash[_-]profile,.bash[_-]logout,.bash[_-]aliases,bash-fc[-.],*.ebuild,*.bash,*.eclass,PKGBUILD,APKBUILD call polyglot#ft#SetFileTypeSH("bash")
 au BufNewFile,BufRead .kshrc,*.ksh call polyglot#ft#SetFileTypeSH("ksh")
 au BufNewFile,BufRead */etc/profile,.profile,*.sh,*.env call polyglot#ft#SetFileTypeSH(getline(1))
-
 
 " Shell script (Arch Linux) or PHP file (Drupal)
 au BufNewFile,BufRead *.install
@@ -1617,6 +1649,9 @@ au BufNewFile,BufRead *.mib,*.my		setf mib
 " Snort Configuration
 au BufNewFile,BufRead *.hog,snort.conf,vision.conf	setf hog
 au BufNewFile,BufRead *.rules			call polyglot#ft#FTRules()
+
+" SPARQL queries
+au BufNewFile,BufRead *.rq,*.sparql		setf sparql
 
 " Spec (Linux RPM)
 au BufNewFile,BufRead *.spec			setf spec
@@ -1728,8 +1763,13 @@ au BufNewFile,BufRead *.tli			setf tli
 " Telix Salt
 au BufNewFile,BufRead *.slt			setf tsalt
 
-" Tera Term Language
-au BufRead,BufNewFile *.ttl			setf teraterm
+" Tera Term Language or Turtle
+au BufRead,BufNewFile *.ttl
+	\ if getline(1) =~ '^@\?\(prefix\|base\)' |
+	\   setf turtle |
+	\ else |
+	\   setf teraterm |
+	\ endif
 
 " Terminfo
 au BufNewFile,BufRead *.ti			setf terminfo
@@ -2189,8 +2229,11 @@ au BufNewFile,BufRead .reminders*		call s:StarSetf('remind')
 " SGML catalog file
 au BufNewFile,BufRead sgml.catalog*		call s:StarSetf('catalog')
 
+" avoid doc files being recognized a shell files
+au BufNewFile,BufRead */doc/{,.}bash[_-]completion{,.d,.sh}{,/*} setf text
+
 " Shell scripts ending in a star
-au BufNewFile,BufRead .bashrc*,.bash[_-]profile*,.bash[_-]logout*,.bash[_-]aliases*,bash-fc[-.]*,PKGBUILD*,APKBUILD* call polyglot#ft#SetFileTypeSH("bash")
+au BufNewFile,BufRead .bashrc*,.bash[_-]profile*,.bash[_-]logout*,.bash[_-]aliases*,bash-fc[-.]*,PKGBUILD*,APKBUILD*,*/{,.}bash[_-]completion{,.d,.sh}{,/*} call polyglot#ft#SetFileTypeSH("bash")
 au BufNewFile,BufRead .kshrc* call polyglot#ft#SetFileTypeSH("ksh")
 au BufNewFile,BufRead .profile* call polyglot#ft#SetFileTypeSH(getline(1))
 

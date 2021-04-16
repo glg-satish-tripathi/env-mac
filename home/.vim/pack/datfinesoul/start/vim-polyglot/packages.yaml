@@ -376,7 +376,7 @@ filetypes:
   - carp
 ---
 name: clojure
-remote: guns/vim-clojure-static
+remote: clojure-vim/clojure.vim
 filetypes:
 - name: clojure
   linguist: Clojure
@@ -887,7 +887,7 @@ globs:
 - '**/htmldjango.vim'
 filetypes:
 - name: htmldjango
-  linguist: HTML+Django
+  linguist: Jinja 
   ignore_warnings:
   # handled by mustache plugin
   - mustache
@@ -1558,7 +1558,7 @@ filetypes:
   linguist: SMT
 ---
 name: solidity
-remote: tomlion/vim-solidity
+remote: TovarishFin/vim-solidity
 filetypes:
 - name: solidity
   linguist: Solidity
@@ -1574,7 +1574,7 @@ filetypes:
   - stylus
 ---
 name: svelte
-remote: evanleck/vim-svelte@main
+remote: leafOfTree/vim-svelte-plugin
 filetypes:
 - name: svelte
   linguist: Svelte
@@ -1786,10 +1786,12 @@ filetypes:
   - '*/etc/xdg/menus/*.menu'
   - '*fglrxrc'
   ignored_extensions:
+  - rs
   - ts
   - tsx
   # handled by powershell plugin
   - ps1xml
+  - mm
 ---
 name: xsl
 remote: vim-scripts/XSLT-syntax
@@ -5581,3 +5583,11 @@ filetypes:
   patterns:
   - pattern: '*.hjson'
     description: Hjson (https://hjson.github.io)
+---
+name: sway
+remote: aouelete/sway-vim-syntax
+filetypes:
+- name: sway
+  patterns:
+  - pattern: '*sway/config'
+    description: Sway Configuration
