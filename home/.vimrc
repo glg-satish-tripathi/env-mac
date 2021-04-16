@@ -280,3 +280,4 @@ autocmd BufNewFile,BufRead *.nomad     set filetype=terraform
 let g:vim_jsx_pretty_colorful_config = 1
 let g:indentLine_fileTypeExclude = [ "json" ]
 let g:vim_json_syntax_conceal=1
+let g:vim_markdown_new_list_item_indent = 2
