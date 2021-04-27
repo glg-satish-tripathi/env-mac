@@ -21,8 +21,10 @@ fi
 #git fetch --all
 #git branch -b "upgrade-${TARGET}" origin/main
 
-rm -rf "${PLUGIN_PATH}"
-git commit -am "remove old ${TARGET} vim plugin"
+if [[ -d "${PLUGIN_PATH}" ]]; then
+  rm -rf "${PLUGIN_PATH}"
+  git commit -am "remove old ${TARGET} vim plugin"
+fi
 git sba "${REPO}" "${PLUGIN_PATH}"
 
 # generate a patch
