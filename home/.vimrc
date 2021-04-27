@@ -32,18 +32,9 @@ set switchbuf=usetab,newtab     " open new buffers always in new tabs
 nnoremap <F3> :set invpaste paste?<CR>
 set pastetoggle=<F3>
 
-"let g:ctrlp_custom_ignore = '\.vagrant\|\.git\|node_modules\|DS_Store\|bower_components\|platforms'
-let g:ctrlp_custom_ignore = {
-	\   'dir' : '\.git$\|\.vagrant$\|bower_components\|node_modules' ,
-	\ 	'file' : '\v\.(exe|dll|lib)$\|DS_Store'
-	\ }
-"let g:ctrlp_custom_ignore = {
-  "\ 'dir':  '\.git$\|\.hg$\|\.svn$\|\.yardoc$',
-  "\ 'file': '\.exe$\|\.so$\|\.dat$'
-  "\ }
-let g:ctrlp_dotfiles = 1
-
 map <Leader><Space> :let @/=""<CR>
+nnoremap <silent> <Leader>= :Files<CR>
+nnoremap <silent> <Leader>- :GFiles?<CR>
 
 set number                      " Show line numbers
 set norelativenumber            " Show numbers relative to current line
@@ -53,9 +44,6 @@ inoremap <F2> <C-O>:set invnumber<CR>
 
 set textwidth=0 wrapmargin=0
 set nowrap " Don't wrap lines
-
-"let g:js_indent_log=1
-nnoremap <Leader>m :w <BAR> !lessc % > %:p:r.css<CR><space>
 
 let g:is_bash=1
 
@@ -86,8 +74,6 @@ colorscheme base16-default-dark
 
 set t_Co=256
 
-" enable ctrlp
-set runtimepath^=~/.vim/bundle/ctrlp
 " helps activete vim-airline
 set laststatus=2
 " make insert mode pop instantly
@@ -125,10 +111,6 @@ vnoremap <silent> * :<C-U>
 "set clipboard=unnamed
 
 let g:javascript_opfirst = 1
-
-if executable('ag')
-  let g:ctrlp_user_command = 'ag %s -l --nocolor --hidden -g "" --ignore "nodes_modules" --ignore ".git"'
-endif
 
 " if hidden is not set, TextEdit might fail.
 set hidden
