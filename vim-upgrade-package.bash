@@ -29,4 +29,4 @@ git sba "${REPO}" "${PLUGIN_PATH}"
 
 # generate a patch
 # git format-patch -1 695b2679 -o patches/
-git am patches/*
+git am patches/* || git am --skip
