@@ -7,6 +7,11 @@ set -o nounset
 set -o pipefail
 IFS=$'\n\t'
 
+STARTING_DIR="."
+if [[ "${1:-}" == "--all" ]]; then
+	STARTING_DIR="$(git rev-parse --show-toplevel)"
+fi
+
 TYPE="$(git rev-parse HEAD -- &> /dev/null && echo "git" || echo "none")"
 # This check has the following purpose
 # - Make sure that this is a git repo
@@ -17,11 +22,11 @@ if [[ "${TYPE}" == "git" ]]; then
 	cat \
 		"$(git config commit.template)" \
 		<( \
-			git shortlog --summary --numbered --email --all \
+			git shortlog --summary --numbered --email --all "${STARTING_DIR}" \
 			| cut -f2- \
 			| awk '$0="Co-authored-by: "$0' \
 			| fgrep -v "$(git config user.email)" \
-			| fzf --multi --exit-0 \
+			| fzf --multi --exit-0 --no-sort \
 		) \
 		> "${TEMPFILE}"
 	# TODO: potentially add commit.template to the top later?
