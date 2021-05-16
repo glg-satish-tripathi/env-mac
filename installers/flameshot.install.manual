@@ -3,10 +3,7 @@
 source "$(dirname "$(readlink -e -- "$0")")/core.source"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
-  true
+  brew install --cask flameshot
 else
-  sudo apt-get -y update
-  sudo apt-get -y upgrade
-
-  sudo apt -y install $(< "${SOURCE_DIR}/1_core.packages")
+  echo "linux install missing"
 fi
