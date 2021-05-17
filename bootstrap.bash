@@ -34,11 +34,16 @@ LOG="/tmp/bootstrap.bash.log"
 # log stdout/stderr to a file and stdout
 exec &> >(tee "${LOG}")
 
-sudo apt-get --assume-yes update
-sudo apt-get --assume-yes install \
-  unzip \
-  jq
-sudo DEBIAN_FRONTEND=noninteractive apt-get --assume-yes install -o Dpkg::Options::="--force-overwrite" bat ripgrep
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  true
+else
+  sudo apt-get --assume-yes update
+  sudo apt-get --assume-yes install \
+    unzip \
+    jq
+  sudo apt-get install -o Dpkg::Options::="--force-overwrite" bat ripgrep
+  sudo DEBIAN_FRONTEND=noninteractive apt-get --assume-yes install -o Dpkg::Options::="--force-overwrite" bat ripgrep
+fi
 
 for SCRIPT in installers/*.install; do
   "${SCRIPT}"
