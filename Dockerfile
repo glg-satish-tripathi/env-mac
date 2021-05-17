@@ -31,6 +31,7 @@ USER ubuntu
 WORKDIR /home/ubuntu
 
 # install the actual dev environement
+# TODO: Need to support branches
 RUN git clone 'https://github.com/datfinesoul/env-ubuntu.git' \
 '/home/ubuntu/env-ubuntu' \
 && cd env-ubuntu && ./bootstrap.bash

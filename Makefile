@@ -9,10 +9,17 @@ run:
 		"/bin/bash"
 
 build:
-	docker build -t env-ubuntu:latest .
+	docker build \
+		--network host \
+		--tag env-ubuntu:latest \
+		.
 
 rebuild:
-	docker build --no-cache -t env-ubuntu:latest .
+	docker build \
+		--network host \
+		--tag env-ubuntu:latest \
+		--no-cache \
+		.
 
 lint:
 	docker pull github/super-linter:latest
