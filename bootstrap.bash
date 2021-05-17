@@ -24,6 +24,8 @@ function cleanup {
 }
 trap cleanup EXIT
 
+set -x
+
 #cp hidden files
 #shopt -s dotglob nullglob
 #files=(*)
@@ -41,7 +43,6 @@ else
   sudo apt-get --assume-yes install \
     unzip \
     jq
-  sudo apt-get install -o Dpkg::Options::="--force-overwrite" bat ripgrep
   sudo DEBIAN_FRONTEND=noninteractive apt-get --assume-yes install -o Dpkg::Options::="--force-overwrite" bat ripgrep
 fi
 

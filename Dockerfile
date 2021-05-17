@@ -30,11 +30,12 @@ RUN echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 USER ubuntu
 WORKDIR /home/ubuntu
 
-# install the actual dev environement
-# TODO: Need to support branches
-RUN git clone 'https://github.com/datfinesoul/env-ubuntu.git' \
-'/home/ubuntu/env-ubuntu' \
-&& cd env-ubuntu && ./bootstrap.bash
+COPY . /home/ubuntu/env-ubuntu
+RUN cd env-ubuntu \
+&& sudo chown -R ubuntu:ubuntu * \
+&& git clean -dxff \
+&& sudo rm -rf .git \
+&& ./bootstrap.bash
 
 # this keeps the container around if used with docker-compose
 CMD ["sleep", "infinity"]
