@@ -21,7 +21,7 @@ wget \
 rsync \
 && rm -rf /var/lib/apt/lists/*
 
-# add ubuntu user, whic his pretty standard on most setups
+# add ubuntu user, which is pretty standard on most setups
 RUN useradd -ms /bin/bash ubuntu
 # allow ubuntu to sudo w/o password for everything
 RUN echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
