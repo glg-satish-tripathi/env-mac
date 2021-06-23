@@ -12,9 +12,9 @@ if [[ "${STATUS}" -ne 0 ]]; then
 	return
 fi
 
-ROOT_DIR="."
-if [[ "${1:-}" == "--all" ]]; then
-	ROOT_DIR="$(git rev-parse --show-toplevel)"
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+if [[ "${1:-}" == "--root" ]]; then
+	ROOT_DIR="."
 fi
 
 COAUTHORS="$(mktemp /tmp/co-author.XXXXXXXX)"

@@ -31,6 +31,7 @@ USER ubuntu
 WORKDIR /home/ubuntu
 
 COPY . /home/ubuntu/env-ubuntu
+# hadolint disable=DL3004
 RUN cd env-ubuntu \
 && sudo chown -R ubuntu:ubuntu * \
 && git clean -dxff \

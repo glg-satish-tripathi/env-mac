@@ -33,8 +33,9 @@ nnoremap <F3> :set invpaste paste?<CR>
 set pastetoggle=<F3>
 
 map <Leader><Space> :let @/=""<CR>
-nnoremap <silent> <Leader>= :Files!<CR>
-nnoremap <silent> <Leader>- :GFiles!?<CR>
+nnoremap <silent> <Leader>= :GFiles! --exclude-standard --cached --others<CR>
+nnoremap <silent> <Leader>- :Files!<CR>
+nnoremap <silent> <Leader>0 :GFiles!?<CR>
 
 set number                      " Show line numbers
 set norelativenumber            " Show numbers relative to current line

@@ -35,9 +35,9 @@
 	lg = log --graph --date-order --pretty=format:'%Cred%h%Creset - %C(white)%s\n%C(red ul)          %Cgreen(%cr) %C(cyan)[%an,%cn]%Creset %C(yellow)%d%Creset'
 	lga = log --graph --date-order --all --pretty=format:'%Cred%h%Creset - %C(white)%s\n%C(red ul)          %Cgreen(%cr) %C(cyan)[%an,%cn]%Creset %C(yellow)%d%Creset'
 	lgn = log --no-merges --name-status --pretty=format:'%C(white)%m %Cred%h %Creset- %C(white)%s\n           %C(yellow)%d%n  %Cgreen%ci - %an,%cn - %Cresetparent: %Cred%p%Creset'
-	m = merge --no-ff --no-commit
-	p = pull --no-ff --no-commit
-	cs = commit -S
+	m = merge --no-ff --no-commit --gpg-sign
+	p = pull --no-ff --no-commit --gpg-sign
+	cs = commit --gpg-sign
 	mergelog = log --oneline --decorate --graph
 	s = status -uall -s -b
 	ss = submodule status --recursive
