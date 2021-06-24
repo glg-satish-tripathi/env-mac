@@ -4,11 +4,18 @@
 # auth with AWS MFA device to obtain fully authed temp creds
 function awslogin {
   unset AWS_SESSION_TOKEN AWS_CSM_ENABLED AWS_CSM_PORT AWS_CSM_HOST
+  if [[ "${1:-}" == "--csm" ]]; then
+    shift
+    AWS_CSM_ENABLED=true
+    AWS_CSM_PORT=31000
+    AWS_CSM_HOST=127.0.0.1
+    export AWS_CSM_ENABLED AWS_CSM_PORT AWS_CSM_HOST
+  fi
   local BW_LOOKUP="${1:?missing bitwarden token}"
   local AWS_MFA_TOKEN
 
-  >&2 echo -e "\n:: fetching environment and authenticator"
-  bw_env "${BW_LOOKUP}"
+  >&2 echo -e "\n:: fetching environment"
+  bw_env "${BW_LOOKUP}" || return 1
 
   >&2 echo -e ":: fetching mfa device"
   AWS_MFA_ARN="$(aws iam list-mfa-devices | \
@@ -42,13 +49,6 @@ function awslogin {
     --duration-seconds 21600 | \
     jq -rc '.Credentials | [.AccessKeyId,.SecretAccessKey,.SessionToken] | @tsv' \
     )"
-
-  if [[ true ]]; then
-    AWS_CSM_ENABLED=true
-    AWS_CSM_PORT=31000
-    AWS_CSM_HOST=127.0.0.1
-    export AWS_CSM_ENABLED AWS_CSM_PORT AWS_CSM_HOST
-  fi
 
   AWS_ACCESS_KEY_ID="${ID}"
   AWS_SECRET_ACCESS_KEY="${KEY}"
