@@ -3,6 +3,7 @@
 # fetch 2FA token via the AWS_BW_TOTP related BW login
 # auth with AWS MFA device to obtain fully authed temp creds
 function awslogin {
+  unset AWS_SESSION_TOKEN AWS_CSM_ENABLED AWS_CSM_PORT AWS_CSM_HOST
   local BW_LOOKUP="${1:?missing bitwarden token}"
   local AWS_MFA_TOKEN
 
@@ -13,7 +14,7 @@ function awslogin {
   AWS_MFA_ARN="$(aws iam list-mfa-devices | \
     jq -cr '.MFADevices[0].SerialNumber')"
   if [[ ! "${AWS_MFA_ARN}" =~ ^arn:.* ]]; then
-    >&2 echo ":: Invalid MFA device for AWS profile '${CURRENT_PROFILE}'"
+    >&2 echo ":: Unable to locate MFA device"
     return 1
   fi
 
@@ -34,13 +35,20 @@ function awslogin {
   #3600=1h
   #900=15m
   IFS=$'\n\t' read -r ID KEY TOKEN <<< "$( \
-    aws --profile "${CURRENT_PROFILE}" \
+    aws \
     sts get-session-token \
     --serial-number "$AWS_MFA_ARN" \
     --token "${AWS_MFA_TOKEN}" \
     --duration-seconds 21600 | \
     jq -rc '.Credentials | [.AccessKeyId,.SecretAccessKey,.SessionToken] | @tsv' \
     )"
+
+  if [[ true ]]; then
+    AWS_CSM_ENABLED=true
+    AWS_CSM_PORT=31000
+    AWS_CSM_HOST=127.0.0.1
+    export AWS_CSM_ENABLED AWS_CSM_PORT AWS_CSM_HOST
+  fi
 
   AWS_ACCESS_KEY_ID="${ID}"
   AWS_SECRET_ACCESS_KEY="${KEY}"

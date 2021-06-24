@@ -41,11 +41,20 @@ profile () {
 		export MY_PROFILE="${PROFILE_MATCH}"
 	fi
 
-	if ! bw login --check &> /dev/null; then
-		BW_SESSION="$(bw login --raw)"
+	if ! KEY_ID="$(keyctl request user bw_session 2> /dev/null)"; then
+		>&2 echo ":: login"
+		bw login --check &> /dev/null || BW_SESSION="bw login --apikey --raw"
+		>&2 echo ":: unlock"
+		bw unlock --check &> /dev/null || BW_SESSION="$(bw unlock --raw)"
+		if [[ -z "${BW_SESSION}" ]]; then
+			return 1
+		fi
+		KEY_ID=$(echo "${BW_SESSION}" | keyctl padd user bw_session @u)
 	else
-		BW_SESSION="$(bw unlock --raw)"
+		>&2 echo ":: using keychain"
 	fi
+	keyctl timeout "${KEY_ID}" ${AUTO_LOCK:-900}
+	BW_SESSION="$(keyctl pipe "${KEY_ID}")"
 	export BW_SESSION
 	bw sync
 }
