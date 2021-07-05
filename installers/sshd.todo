@@ -1,0 +1,24 @@
+sudo apt install openssh-server
+sudo systemctl status ssh
+sudo sed -E -i -e 's|^#(PasswordAuthentication)\s+\w+$|\1 no|g' /etc/ssh/sshd_config
+sudo sed -E -i -e 's|^#(PubkeyAuthentication)\s+\w+$|\1 no|g' /etc/ssh/sshd_config
+sudo iptables -I INPUT -p tcp --dport 22 -s 192.168.0.0/16 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 22 -j REJECT
+
+# ipv6?
+
+# if ufw
+sudo ufw allow from 192.168.0.0/16 to any port 22
+
+
+
+[.. then, at the end of the file ..]
+
+# Allow auth from local network
+Match Address  192.168.68.*
+    PubkeyAuthentication yes
+    # if you want, you can even restrict to a specified user
+    AllowUsers datfinesoul
+
+sudo service sshd restart
+
