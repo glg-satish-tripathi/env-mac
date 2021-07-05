@@ -53,7 +53,13 @@ ps1_nvm () {
   printf '%s' "js:${VERSION}"
 }
 
+ps1_tf () {
+  local TF
+  TF="$(tf version --json | jq -r .terraform_version)"
+  printf '%s' "tf:${TF}"
+}
+
 export PS1="${COLOR_CLEAR}
 ${COLOR_YELLOW}\w${COLOR_CLEAR}
-\t \$(git_ps1_info) \$(ps1_nvm)
+\t \$(git_ps1_info) \$(ps1_nvm) \$(ps1_tf)
 ${COLOR_LGREEN}→${COLOR_CLEAR} "
