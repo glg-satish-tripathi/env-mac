@@ -12,3 +12,6 @@ export HISTIGNORE="&:[ ]*:exit"
 shopt -s histappend
 # Multiline commands become one line
 shopt -s cmdhist
+
+bind '"\e[A":history-search-backward'
+bind '"\e[B":history-search-forward'

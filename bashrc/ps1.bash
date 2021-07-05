@@ -7,7 +7,7 @@ COLOR_RED="\[\e[0;31m\]"
 COLOR_CYAN="\[\e[0;36m\]"
 COLOR_LCYAN="\[\e[1;36m\]"
 
-function git_ps1_info {
+git_ps1_info () {
 # local EMPTY_TREE_HASH="$(git hash-object -t tree /dev/null)"
 # exit if we are not in a git repo
 git rev-parse --git-dir > /dev/null 2>&1 || return
@@ -45,7 +45,15 @@ fi
 printf "\e[33m(${COLOR}${BRANCH}\e[33m -> ${TRACKING})\e[m"
 }
 
+ps1_nvm () {
+  local NVM SYSTEM VERSION
+  NVM="$(nvm version)"
+  SYSTEM="$(node -v)"
+  VERSION="${NVM/system/${SYSTEM#v}}"
+  printf '%s' "js:${VERSION}"
+}
+
 export PS1="${COLOR_CLEAR}
 ${COLOR_YELLOW}\w${COLOR_CLEAR}
-\t \$(git_ps1_info) \$(nvm version)
+\t \$(git_ps1_info) \$(ps1_nvm)
 ${COLOR_LGREEN}→${COLOR_CLEAR} "
