@@ -16,4 +16,6 @@ else
   sudo rm -rf '/usr/local/go'
   sudo tar -C '/usr/local' -xzf "go${VERSION}.linux-${ARCHITECTURE}.tar.gz"
 fi
-
+go get -u 'github.com/sourcegraph/go-langserver'
+# go vet -vettool=$(which shadow)
+go install 'golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow@latest'

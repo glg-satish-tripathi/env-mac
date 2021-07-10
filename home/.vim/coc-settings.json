@@ -73,7 +73,7 @@
   },
   "languageserver": {
     "golang": {
-      "command": "/home/phadviger/go/bin/go-langserver",
+      "command": "go-langserver",
       "filetypes": [
         "go"
       ],
