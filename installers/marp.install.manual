@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC1090
+source "$(dirname "$(readlink -e -- "$0")")/core.source"
+
+VERSION="${1:-1.1.1}"
+
+if [[ "$(uname -s)" == 'Darwin' ]]; then
+  false
+else
+  ARCHITECTURE="$(dpkg --print-architecture)"
+  wget \
+    --quiet \
+    "$(printf '%s' \
+    'https://github.com/marp-team/marp-cli/releases/download/' \
+    "v${VERSION}/marp-cli-v${VERSION}-linux.tar.gz"
+    )"
+  tar -xvf "marp-cli-v${VERSION}-linux.tar.gz"
+  sudo mv "marp" "/usr/local/bin/marp"
+fi
+
