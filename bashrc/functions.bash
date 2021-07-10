@@ -4,3 +4,5 @@ for FILE in "${HOME}"/env-ubuntu/functions/*.bash; do
     source "${FILE}"
   fi
 done
+
+export PROMPT_COMMAND="nvmrc"

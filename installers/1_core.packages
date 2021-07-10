@@ -16,3 +16,5 @@ net-tools
 traceroute
 shellcheck
 ipcalc
+keyutils
+tree
