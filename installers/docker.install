@@ -21,8 +21,8 @@ sudo apt-get --yes update
 sudo apt-get --yes install docker-ce docker-ce-cli containerd.io
 
 getent group 'docker' || sudo addgroup 'docker'
-sudo usermod -aG docker "${USER}"
+sudo usermod -aG docker "$(id --user --name)"
 newgrp docker
 
 # if ~/.docker was created as root, remove it or fix permissions
-docker run hello-world
+#docker run hello-world
