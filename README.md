@@ -6,6 +6,7 @@
 
 ```bash
 #!/bin/bash
+wget 'https://github.com/datfinesoul/env-ubuntu/archive/refs/heads/main.zip'
 git clone https://github.com/datfinesoul/env-ubuntu.git /home/ubuntu/env-ubuntu
 chown -R ubuntu:ubuntu /home/ubuntu/env-ubuntu
 sudo -Hu ubuntu bash -c "cd && cd env-ubuntu && ./bootstrap.bash"

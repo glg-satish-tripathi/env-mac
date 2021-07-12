@@ -2,5 +2,21 @@
 # shellcheck disable=SC1090
 source "$(dirname "$(readlink -e -- "$0")")/core.source"
 
-sudo apt-get --yes install python3-pip
-pip3 install --user aws-sam-cli
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  false
+else
+  ARCHITECTURE="$(dpkg --print-architecture)"
+  HARDWARE="$(uname -m)"
+  wget \
+    --quiet \
+    "$(printf '%s' \
+    "https://github.com/aws/aws-sam-cli/releases/latest/download" \
+    "/aws-sam-cli-linux-${HARDWARE}.zip"
+    )"
+  unzip 'aws-sam-cli-linux-x86_64.zip'
+  if [[ "$(which sam > /dev/null && echo "found" || echo "missing")" == "missing" ]]; then
+    sudo './install'
+  else
+    sudo './install' --update
+  fi
+fi
