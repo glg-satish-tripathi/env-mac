@@ -41,20 +41,39 @@ profile () {
 		export MY_PROFILE="${PROFILE_MATCH}"
 	fi
 
-	if ! KEY_ID="$(keyctl request user bw_session 2> /dev/null)"; then
+	# Need to look at Darwin options for keyctl
+	# → security add-generic-password -U -a bitwarden -s bw_session -w testme
+	# → security find-generic-password -a bitwarden -s bw_session -w
+	# https://www.netmeister.org/blog/keychain-passwords.html
+
+	if [[ "$(uname -s)" == 'Darwin' ]]; then
 		>&2 echo ":: login"
 		bw login --check &> /dev/null || BW_SESSION="bw login --apikey --raw"
 		>&2 echo ":: unlock"
 		bw unlock --check &> /dev/null || BW_SESSION="$(bw unlock --raw)"
 		if [[ -z "${BW_SESSION}" ]]; then
+			>&2 echo ":: BW_SESSION missing"
 			return 1
 		fi
-		KEY_ID=$(echo "${BW_SESSION}" | keyctl padd user bw_session @u)
+		export BW_SESSION
+		bw sync
 	else
-		>&2 echo ":: using keychain"
+		if ! KEY_ID="$(keyctl request user bw_session 2> /dev/null)"; then
+			>&2 echo ":: login"
+			bw login --check &> /dev/null || BW_SESSION="bw login --apikey --raw"
+			>&2 echo ":: unlock"
+			bw unlock --check &> /dev/null || BW_SESSION="$(bw unlock --raw)"
+			if [[ -z "${BW_SESSION}" ]]; then
+				>&2 echo ":: BW_SESSION missing"
+				return 1
+			fi
+			KEY_ID=$(echo "${BW_SESSION}" | keyctl padd user bw_session @u)
+		else
+			>&2 echo ":: using keychain"
+			BW_SESSION="$(keyctl pipe "${KEY_ID}")"
+		fi
+		keyctl timeout "${KEY_ID}" ${AUTO_LOCK:-900}
+		export BW_SESSION
+		bw sync
 	fi
-	keyctl timeout "${KEY_ID}" ${AUTO_LOCK:-900}
-	BW_SESSION="$(keyctl pipe "${KEY_ID}")"
-	export BW_SESSION
-	bw sync
 }

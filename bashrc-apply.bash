@@ -2,6 +2,9 @@
 SCRIPT="$(readlink -e -- "${0}")"
 SCRIPT_DIR="$(dirname "${SCRIPT}")"
 
+SED="sed"
+"${SED}" --version &> /dev/null || SED="gsed"
+
 # http://redsymbol.net/articles/unofficial-bash-strict-mode/
 set -o errexit
 set -o nounset
@@ -31,7 +34,7 @@ exec &> >(tee "${LOG}")
 for FILE in bashrc/*.bash; do
   FILE_NAME="$(basename "${FILE}")"
   # remove section in .bashrc ( eg. #:somefile.bash:[+-] )
-  sed -i '/#:'"${FILE_NAME}"':[+]/,/#:'"${FILE_NAME}"':[-]/d' "${HOME}/.bashrc"
+  "${SED}" -i '/#:'"${FILE_NAME}"':[+]/,/#:'"${FILE_NAME}"':[-]/d' "${HOME}/.bashrc"
   # add the section back
   {
     echo "#:${FILE_NAME}:+"
