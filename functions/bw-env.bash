@@ -8,14 +8,37 @@ if [[ -z "${MY_PROFILE}" ]]; then
 	return 1
 fi
 
-# check if the profile is unlocked
-STATUS=0; bw unlock --check > /dev/null 2>&1 || STATUS=$?
-if [[ "${STATUS}" -ne 0 ]]; then
-	>&2 echo ":: bitwarden profile is locked"
-	return 1
+# TODO: This is currently duplciated from profile.bash
+if [[ "$(uname -s)" == 'Darwin' ]]; then
+	>&2 echo ":: login"
+	bw login --check &> /dev/null || BW_SESSION="bw login --apikey --raw"
+	>&2 echo ":: unlock"
+	bw unlock --check &> /dev/null || BW_SESSION="$(bw unlock --raw)"
+	if [[ -z "${BW_SESSION}" ]]; then
+		>&2 echo ":: BW_SESSION missing"
+		return 1
+	fi
+	export BW_SESSION
+	bw sync
+else
+	if ! KEY_ID="$(keyctl request user bw_session 2> /dev/null)"; then
+		>&2 echo ":: login"
+		bw login --check &> /dev/null || BW_SESSION="bw login --apikey --raw"
+		>&2 echo ":: unlock"
+		bw unlock --check &> /dev/null || BW_SESSION="$(bw unlock --raw)"
+		if [[ -z "${BW_SESSION}" ]]; then
+			>&2 echo ":: BW_SESSION missing"
+			return 1
+		fi
+		KEY_ID=$(echo "${BW_SESSION}" | keyctl padd user bw_session @u)
+	else
+		>&2 echo ":: using keychain"
+		BW_SESSION="$(keyctl pipe "${KEY_ID}")"
+	fi
+	keyctl timeout "${KEY_ID}" ${AUTO_LOCK:-900}
+	export BW_SESSION
+	bw sync
 fi
-
->&2 bw sync
 
 # obtain folderid from bitwarden based on MY_PROFILE
 FOLDER_ID="$( \
