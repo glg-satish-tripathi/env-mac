@@ -60,7 +60,8 @@ profile () {
 	else
 		if ! KEY_ID="$(keyctl request user bw_session 2> /dev/null)"; then
 			>&2 echo ":: login"
-			bw login --check &> /dev/null || BW_SESSION="bw login --apikey --raw"
+			#bw login --check &> /dev/null || BW_SESSION="bw login --apikey --raw"
+			bw login --check &> /dev/null || BW_SESSION="bw login --raw"
 			>&2 echo ":: unlock"
 			bw unlock --check &> /dev/null || BW_SESSION="$(bw unlock --raw)"
 			if [[ -z "${BW_SESSION}" ]]; then
