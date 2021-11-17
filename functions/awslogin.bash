@@ -10,6 +10,16 @@ function awslogin {
     AWS_CSM_PORT=31000
     AWS_CSM_HOST=127.0.0.1
     export AWS_CSM_ENABLED AWS_CSM_PORT AWS_CSM_HOST
+    >&2 echo 'AWS_CSM_ENABLED AWS_CSM_PORT AWS_CSM_HOST'
+  fi
+  unset HTTP_PROXY HTTPS_PROXY AWS_CA_BUNDLE
+  if [[ "${1:-}" == "--iamlive" ]]; then
+    shift
+    HTTP_PROXY=http://127.0.0.1:10080
+    HTTPS_PROXY=http://127.0.0.1:10080
+    AWS_CA_BUNDLE=~/.iamlive/ca.pem
+    export HTTP_PROXY HTTPS_PROXY AWS_CA_BUNDLE
+    >&2 echo 'HTTP_PROXY HTTPS_PROXY AWS_CA_BUNDLE'
   fi
   local BW_LOOKUP="${1:?missing bitwarden token}"
   local AWS_MFA_TOKEN
