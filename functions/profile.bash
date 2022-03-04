@@ -25,7 +25,7 @@ profile () {
 		# validate the entered profile against the list
 		local PROFILE_MATCH
 		PROFILE_MATCH="$( \
-			<"${PROFILE_DB}" jq -r --from-file <(cat <<- DOC
+			<"${PROFILE_DB}" jq -r --from-file <(\cat <<- DOC
 			.[]
 			| select(.name | test("^${PROFILE_NAME}$"))
 			| .name
