@@ -1,25 +1,14 @@
 #!/usr/bin/env bash
 
-readlink='readlink'
-readlink -e /tmp > /dev/null 2>&1
-if [[ "$?" -ne 0 ]]; then
-  readlink='greadlink'
-fi
-
-# full path to parent script
-SCRIPT="$("${readlink}" -e -- "${0}")"
-# parent script file name
-SCRIPT_BASE="$(basename "${SCRIPT}")"
-
 # full path to this file
-SOURCE_FILE="$("${readlink}" -e -- "${BASH_SOURCE[${#BASH_SOURCE[@]} - 1]}")"
+SOURCE_FILE="$(readlink -e -- "${BASH_SOURCE[${#BASH_SOURCE[@]} - 1]}")"
 # directory of this file
 SOURCE_DIR="$(dirname "${SOURCE_FILE}")"
 
-if [[ "${SCRIPT_BASE}" == 'core.source' ]]; then
-  echo ":: cannot call core.source directly"
-  exit 1
-fi
+#if [[ "${SCRIPT_NAME}" == 'core.source' ]]; then
+#  echo ":: cannot call core.source directly"
+#  exit 1
+#fi
 
 if [[ "$(id -u)" -eq "0" ]]; then
   echo "please DO NOT run as root";
@@ -33,19 +22,19 @@ set -o pipefail
 IFS=$'\n\t'
 
 PID=$$
-WORKDIR="/tmp/${SCRIPT_BASE}"
-LOG="/tmp/${SCRIPT_BASE}.log"
+WORKDIR="/tmp/${SCRIPT_NAME}"
+LOG="/tmp/${SCRIPT_NAME}.log"
 
 # directory that keeps track of successful installs
 CACHE_DIR="${SOURCE_DIR}/cache"
 mkdir -p "${CACHE_DIR}"
-DONE="${CACHE_DIR}/${SCRIPT_BASE}.done"
+DONE="${CACHE_DIR}/${SCRIPT_NAME}.done"
 
 # if app was successfully installed it is skipped on re-runs
 if [[ "${1:-}" == "--force" ]]; then
   shift
 elif [[ -f "${DONE}" ]]; then
-  echo ":: ${SCRIPT_BASE}:${PID} skip"
+  echo ":: ${SCRIPT_NAME}:${PID} skip"
   exit 0
 fi
 
@@ -58,11 +47,11 @@ exec &> >(tee "${LOG}")
 function cleanup {
   # shellcheck disable=SC2154
   if [ -n "${1:-}" ]; then
-    echo ":: ${SCRIPT_BASE}:${PID} Aborted by ${1:-}"
+    echo ":: ${SCRIPT_NAME}:${PID} Aborted by ${1:-}"
   elif [ "${status}" -ne 0 ]; then
-    echo ":: ${SCRIPT_BASE}:${PID} Failure (status $status)"
+    echo ":: ${SCRIPT_NAME}:${PID} Failure (status $status)"
   else
-    echo ":: ${SCRIPT_BASE}:${PID} Success"
+    echo ":: ${SCRIPT_NAME}:${PID} Success"
     touch "${DONE}"
   fi
   popd > /dev/null

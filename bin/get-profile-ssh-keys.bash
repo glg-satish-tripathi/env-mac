@@ -29,10 +29,7 @@ fi
 
 # 1. obtain array of ssh keys from bitwarden
 # 2. one base64 value per item for easier looping
-DATA="$( \
-	bw list items \
-	--folderid "${FOLDER_ID}" \
-	| jq -rM --from-file <(cat <<- DOC
+QUERY=$(cat <<- "DOC"
 		map(
 			select(.fields)
 			| (.fields | from_entries | {type: .type})
@@ -44,7 +41,12 @@ DATA="$( \
 		| .[]
 		| @base64
 DOC
-))"
+)
+DATA="$( \
+	bw list items \
+	--folderid "${FOLDER_ID}" \
+	| jq -rM --from-file <(echo ${QUERY}) \
+)"
 
 mkdir -p "${HOME}/.ssh"
 chmod 700 "${HOME}/.ssh"

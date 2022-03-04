@@ -1,12 +1,26 @@
 #!/usr/bin/env bash
-SCRIPT="$(readlink -e -- "${0}")"
-SCRIPT_DIR="$(dirname "${SCRIPT}")"
 
 # http://redsymbol.net/articles/unofficial-bash-strict-mode/
 set -o errexit
 set -o nounset
 set -o pipefail
 IFS=$'\n\t'
+
+# /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  touch ~/.bash_sessions_disable
+  mkdir -p /usr/local/bin
+  cp ./env-ubuntu-core /usr/local/bin
+  chmod 775 /usr/local/bin/env-ubuntu-core
+  brew install coreutils gnu-sed
+  . /usr/local/bin/env-ubuntu-core
+  type -t readlink
+fi
+
+SCRIPT="$(readlink -e -- "${0}")"
+SCRIPT_DIR="$(dirname "${SCRIPT}")"
+
+exit 1
 
 if [[ "${SCRIPT_DIR}" != "$(readlink -e -- "$(pwd)")" ]]; then
   echo "please execute this script from its own directory"

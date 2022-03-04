@@ -1,13 +1,18 @@
-#!/usr/bin/env bash
+#!/usr/bin/env /usr/local/bin/env-ubuntu-core
+# NOTE: OSX requires shebang to be binary file not script, this is the workaround
 # shellcheck disable=SC1090
-source "$(dirname "$(readlink -e -- "$0")")/core.source"
+. "${SCRIPT_DIR}/core.source"
 
-if [[ "$(which gh > /dev/null && echo "found" || echo "missing")" == "missing" ]]; then
-  echo ":: installing"
-  sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-key C99B11DEB97541F0
-  sudo apt-add-repository https://cli.github.com/packages
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  brew upgrade gh || brew install gh
 else
-  echo ":: updating"
-fi
+  if [[ "$(which gh > /dev/null && echo "found" || echo "missing")" == "missing" ]]; then
+    echo ":: installing"
+    sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-key C99B11DEB97541F0
+    sudo apt-add-repository https://cli.github.com/packages
+  else
+    echo ":: updating"
+  fi
   sudo apt-get --yes update
   sudo apt-get --yes install gh
+fi

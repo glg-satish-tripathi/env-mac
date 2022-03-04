@@ -1,9 +1,4 @@
-#!/usr/bin/env bash
-SCRIPT="$(readlink -e -- "${0}")"
-SCRIPT_DIR="$(dirname "${SCRIPT}")"
-
-SED="sed"
-"${SED}" --version &> /dev/null || SED="gsed"
+#!/usr/bin/env /usr/local/bin/env-ubuntu-core
 
 # http://redsymbol.net/articles/unofficial-bash-strict-mode/
 set -o errexit
@@ -34,7 +29,7 @@ exec &> >(tee "${LOG}")
 for FILE in bashrc/*.bash; do
   FILE_NAME="$(basename "${FILE}")"
   # remove section in .bashrc ( eg. #:somefile.bash:[+-] )
-  "${SED}" -i '/#:'"${FILE_NAME}"':[+]/,/#:'"${FILE_NAME}"':[-]/d' "${HOME}/.bashrc"
+  sed -i '/#:'"${FILE_NAME}"':[+]/,/#:'"${FILE_NAME}"':[-]/d' "${HOME}/.bashrc"
   # add the section back
   {
     echo "#:${FILE_NAME}:+"

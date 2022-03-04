@@ -3,9 +3,9 @@ export HISTTIMEFORMAT="%y/%m/%d %T "
 # Ignore dupliate commands even if there is a space difference, and don't save them to history
 export HISTCONTROL="erasedups:ignoreboth:ignorespace"
 # Number of commands to save
-export HISTSIZE=-1
+export HISTSIZE=50000
 # History maxiumum file size
-export HISTFILESIZE=-1
+export HISTFILESIZE=50000
 # Ignore exit commands from history
 export HISTIGNORE="&:[ ]*:exit"
 # Never overwrise history, always append

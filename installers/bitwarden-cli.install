@@ -1,6 +1,9 @@
-#!/usr/bin/env bash
+#!/usr/bin/env /usr/local/bin/env-ubuntu-core
+# NOTE: OSX requires shebang to be binary file not script, this is the workaround
 # shellcheck disable=SC1090
-source "$(dirname "$(readlink -e -- "$0")")/core.source"
+. "${SCRIPT_DIR}/core.source"
+
+#TODO: Disable for Darwin
 
 # Setting up snap (snap.d) inside a docker container is to hard,
 # so this script includes the nodejs install as well, which
