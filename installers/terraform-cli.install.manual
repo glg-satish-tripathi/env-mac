@@ -32,3 +32,5 @@ else
 fi
 
 mkdir -p "${HOME}/.terraform.d/plugin-cache"
+
+# vim: set ft=bash :
