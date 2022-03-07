@@ -55,7 +55,12 @@ ps1_nvm () {
 
 ps1_tf () {
   local TF
-  TF="$(tf version --json | jq -r .terraform_version)"
+  if which terraform > /dev/null; then
+    TF="$(terraform version --json | jq -r .terraform_version)"
+  else
+    TF="n/a"
+  fi
+
   printf '%s' "tf:${TF}"
 }
 

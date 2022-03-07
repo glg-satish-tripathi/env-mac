@@ -93,8 +93,6 @@ pushd "${HOME}/.vim/pack/datfinesoul/start/coc.nvim"
 npm install
 popd
 
-exit 1
-
 for FILE in bashrc/*.bash; do
   FILE_NAME="$(basename "${FILE}")"
   # remove section in .bashrc ( eg. #:somefile.bash:[+-] )

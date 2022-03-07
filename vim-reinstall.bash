@@ -8,17 +8,6 @@ if [[ "${SCRIPT_DIR}" != "$(readlink -e -- "$(pwd)")" ]]; then
   exit 1
 fi
 
-function cleanup {
-  ls /tmp/*.log
-  :
-}
-trap cleanup EXIT
-
-LOG="/tmp/vim-reinstall.bash.log"
-
-# log stdout/stderr to a file and stdout
-exec &> >(tee "${LOG}")
-
 # this needs to be cleared to make sure old files are not included in later
 # package installations
 rm -rf "${HOME}/.vim"
