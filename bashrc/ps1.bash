@@ -19,6 +19,7 @@ fi
 # assign the branch to a BRANCH variable
 local BRANCH="$(git symbolic-ref --short HEAD 2> /dev/null)"
 local TRACKING="$(git for-each-ref --format='%(upstream:short)' $(git symbolic-ref -q HEAD))"
+[[ -n "${TRACKING}" ]] && TRACKING="\e[32mT\e[m" || TRACKING='X'
 # tracking branch
 # git rev-parse --abbrev-ref --symbolic-full-name @{u}
 # git for-each-ref --format='%(upstream:short)' $(git symbolic-ref -q HEAD)
@@ -42,7 +43,7 @@ else
   local COLOR="\e[m"
 fi
 
-printf "\e[33m(${COLOR}${BRANCH}\e[33m -> ${TRACKING})\e[m"
+printf "\e[33m(${TRACKING} ${COLOR}${BRANCH}\e[33m)\e[m"
 }
 
 ps1_nvm () {
