@@ -1,0 +1,13 @@
+#!/usr/bin/env /home/phadviger/env-ubuntu/env-ubuntu-core 
+env | sort
+# NOTE: OSX requires shebang to be binary file not script, this is the workaround
+# shellcheck disable=SC1090
+. "${SCRIPT_DIR}/core.source"
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+true
+else
+true
+fi
+
+echo hello

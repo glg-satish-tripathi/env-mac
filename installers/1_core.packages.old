@@ -4,12 +4,14 @@ tmux
 pwgen
 apg
 curl
+fonts-firacode
 fonts-hack-ttf
 silversearcher-ag
 jq
 icdiff
 htop
 gawk
+percol
 net-tools
 traceroute
 shellcheck

@@ -1,6 +1,7 @@
-#!/usr/bin/env bash
+#!/usr/bin/env /home/phadviger/env-ubuntu/env-ubuntu-core 
+# NOTE: OSX requires shebang to be binary file not script, this is the workaround
 # shellcheck disable=SC1090
-source "$(dirname "$(readlink -e -- "$0")")/core.source"
+. "${SCRIPT_DIR}/core.source"
 
 sudo apt-get --yes remove vim || true
 sudo apt-get --yes remove vi || true

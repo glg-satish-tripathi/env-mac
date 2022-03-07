@@ -1,21 +1,17 @@
 #!/usr/bin/env bash
+if [[ "$(uname -s)" == "Darwin" ]]; then
+
 function readlink {
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    greadlink "$@"
-  else
-    readlink "$@"
-  fi
+  greadlink "$@"
 }
 export -f readlink
 
 function sed {
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    gsed "$@"
-  else
-    sed "$@"
-  fi
+  gsed "$@"
 }
 export -f sed
+
+fi
 
 (return 0 2>/dev/null) && SOURCED=1 || SOURCED=0
 if [[ "${SOURCED}" -eq 0 ]]; then
@@ -36,5 +32,5 @@ if [[ "${SOURCED}" -eq 0 ]]; then
 
   set +o allexport
 
-  bash "${SCRIPT_FULL_PATH}" $@
+  [[ -n "${SCRIPT_NAME}" ]] && bash "${SCRIPT_FULL_PATH}" $@
 fi
