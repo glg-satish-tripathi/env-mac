@@ -1,9 +1,13 @@
-#!/usr/bin/env bash
+#!/usr/bin/env /home/phadviger/env-ubuntu/env-ubuntu-core
+# NOTE: OSX requires shebang to be binary file not script, this is the workaround
 # shellcheck disable=SC1090
-source "$(dirname "$(readlink -e -- "$0")")/core.source"
+. "${SCRIPT_DIR}/core.source"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
   brew install --cask flameshot
 else
-  echo "linux install missing"
+	sudo apt-get --yes install flameshot
+  >&2 echo 'You can add "/usr/bin/flameshot gui" to a custom keybind'
 fi
+
+# vim: set ft=bash :
