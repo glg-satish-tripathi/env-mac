@@ -1,20 +1,10 @@
-#!/usr/bin/env bash
-SCRIPT="$(readlink -e -- "${0}")"
-SCRIPT_DIR="$(dirname "${SCRIPT}")"
-
-# http://redsymbol.net/articles/unofficial-bash-strict-mode/
-set -o errexit
-set -o nounset
-set -o pipefail
-IFS=$'\n\t'
+#!/usr/bin/env /home/phadviger/env-ubuntu/env-ubuntu-core
+# NOTE: OSX requires shebang to be binary file not script, this is the workaround
+# shellcheck disable=SC1090
+. "${SCRIPT_DIR}/core.source"
 
 if [[ "${SCRIPT_DIR}" != "$(readlink -e -- "$(pwd)")" ]]; then
   echo "please execute this script from its own directory"
-  exit 1
-fi
-
-if [[ "$(id -u)" -eq "0" ]]; then
-  echo "please DO NOT run as root";
   exit 1
 fi
 
