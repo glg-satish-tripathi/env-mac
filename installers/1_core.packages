@@ -15,3 +15,4 @@ shellcheck
 ipcalc
 keyutils
 tree
+moreutils

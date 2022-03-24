@@ -50,7 +50,7 @@ alias recolor="source $HOME/.config/base16-shell/base16-default.dark.sh"
 
 alias k=kubectl
 
-alias tfver="${HOME}/env-ubuntu/installers/terraform-cli.install"
+alias tfver="${HOME}/env-ubuntu/installers/terraform-cli.install.manual"
 which bat > /dev/null || alias bat='batcat'
 
 # AT HOME ONLY

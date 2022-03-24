@@ -65,7 +65,8 @@ ps1_tf () {
   printf '%s' "tf:${TF}"
 }
 
+# \$(TZ='Asia/Kolkata' date '+%F %T %Z')
 export PS1="${COLOR_CLEAR}
 ${COLOR_YELLOW}\w${COLOR_CLEAR}
-\t \$(git_ps1_info) \$(ps1_nvm) \$(ps1_tf)
+\t \$(date '+%Z') \$(git_ps1_info) \$(ps1_nvm) \$(ps1_tf)
 ${COLOR_LGREEN}→${COLOR_CLEAR} "
