@@ -1,11 +1,11 @@
 import { exec } from 'child_process'
 import fs from 'fs-extra'
-import net from 'net'
+import minimatch from 'minimatch'
 import os from 'os'
 import path from 'path'
 import readline from 'readline'
 import util from 'util'
-import minimatch from 'minimatch'
+import * as platform from './platform'
 const logger = require('./logger')('util-fs')
 
 export type OnReadLine = (line: string) => void
@@ -14,19 +14,8 @@ export async function statAsync(filepath: string): Promise<fs.Stats | null> {
   let stat = null
   try {
     stat = await fs.stat(filepath)
-  } catch (e) { }
+  } catch (e) {}
   return stat
-}
-
-export async function isDirectory(filepath: string): Promise<boolean> {
-  let stat = await statAsync(filepath)
-  return stat && stat.isDirectory()
-}
-
-export async function unlinkAsync(filepath: string): Promise<void> {
-  try {
-    await fs.unlink(filepath)
-  } catch (e) { }
 }
 
 export function renameAsync(oldPath: string, newPath: string): Promise<void> {
@@ -46,40 +35,40 @@ export async function isGitIgnored(fullpath: string): Promise<boolean> {
   try {
     let { stdout } = await util.promisify(exec)('git rev-parse --show-toplevel', { cwd: path.dirname(fullpath) })
     root = stdout.trim()
-  } catch (e) { }
+  } catch (e) {}
   if (!root) return false
   let file = path.relative(root, fullpath)
   try {
     let { stdout } = await util.promisify(exec)(`git check-ignore ${file}`, { cwd: root })
     return stdout.trim() == file
-  } catch (e) { }
+  } catch (e) {}
   return false
 }
 
-export function resolveRoot(folder: string, subs: string[], cwd?: string, bottomup = false): string | null {
-  let home = os.homedir()
+export function isFolderIgnored(folder: string, ignored: string[] = []): boolean {
+  if (!ignored || !ignored.length) return false
+  return ignored.some(p => minimatch(folder, p, { dot: true }))
+}
+
+export function resolveRoot(folder: string, subs: string[], cwd?: string, bottomup = false, checkCwd = true, ignored: string[] = []): string | null {
   let dir = fixDriver(folder)
-  if (isParentFolder(dir, home, true)) return null
-  if (cwd && isParentFolder(cwd, dir, true) && inDirectory(cwd, subs)) return cwd
+  if (checkCwd && cwd && isParentFolder(cwd, dir, true) && !isFolderIgnored(cwd, ignored) && inDirectory(cwd, subs)) return cwd
   let parts = dir.split(path.sep)
   if (bottomup) {
     while (parts.length > 0) {
       let dir = parts.join(path.sep)
-      if (dir == home) {
-          break
-      }
-      if (dir != home && inDirectory(dir, subs)) {
+      if (!ignored.includes(dir) && inDirectory(dir, subs)) {
         return dir
       }
       parts.pop()
     }
-  return null
+    return null
   } else {
     let curr: string[] = [parts.shift()]
     for (let part of parts) {
       curr.push(part)
       let dir = curr.join(path.sep)
-      if (dir != home && inDirectory(dir, subs)) {
+      if (!ignored.includes(dir) && inDirectory(dir, subs)) {
         return dir
       }
     }
@@ -157,10 +146,6 @@ export function readFileLines(fullpath: string, start: number, end: number): Pro
   let n = 0
   return new Promise((resolve, reject) => {
     rl.on('line', line => {
-      if (n == 0 && line.startsWith('\uFEFF')) {
-        // handle BOM
-        line = line.slice(1)
-      }
       if (n >= start && n <= end) {
         res.push(line)
       }
@@ -203,21 +188,21 @@ export function readFileLine(fullpath: string, count: number): Promise<string> {
   })
 }
 
-export async function writeFile(fullpath: string, content: string): Promise<void> {
-  await fs.writeFile(fullpath, content, { encoding: 'utf8' })
+export function sameFile(fullpath: string | null, other: string | null, caseInsensitive?: boolean): boolean {
+  caseInsensitive = typeof caseInsensitive == 'boolean' ? caseInsensitive : platform.isWindows || platform.isMacintosh
+  if (!fullpath || !other) return false
+  if (caseInsensitive) return fullpath.toLowerCase() === other.toLowerCase()
+  return fullpath === other
 }
 
-export function validSocket(path: string): Promise<boolean> {
-  let clientSocket = new net.Socket()
-  return new Promise(resolve => {
-    clientSocket.on('error', () => {
-      resolve(false)
-    })
-    clientSocket.connect({ path }, () => {
-      clientSocket.unref()
-      resolve(true)
-    })
-  })
+export function fileStartsWith(dir: string, pdir: string) {
+  let caseInsensitive = platform.isWindows || platform.isMacintosh
+  if (caseInsensitive) return dir.toLowerCase().startsWith(pdir.toLowerCase())
+  return dir.startsWith(pdir)
+}
+
+export async function writeFile(fullpath: string, content: string): Promise<void> {
+  await fs.writeFile(fullpath, content, { encoding: 'utf8' })
 }
 
 export function isFile(uri: string): boolean {
@@ -239,13 +224,13 @@ export function isParentFolder(folder: string, filepath: string, checkEqual = fa
   let pdir = fixDriver(path.resolve(path.normalize(folder)))
   let dir = fixDriver(path.resolve(path.normalize(filepath)))
   if (pdir == '//') pdir = '/'
-  if (pdir == dir) return checkEqual ? true : false
-  if (pdir.endsWith(path.sep)) return dir.startsWith(pdir)
-  return dir.startsWith(pdir) && dir[pdir.length] == path.sep
+  if (sameFile(pdir, dir)) return checkEqual ? true : false
+  if (pdir.endsWith(path.sep)) return fileStartsWith(dir, pdir)
+  return fileStartsWith(dir, pdir) && dir[pdir.length] == path.sep
 }
 
 // use uppercase for windows driver
-export function fixDriver(filepath: string): string {
-  if (os.platform() != 'win32' || filepath[1] != ':') return filepath
+export function fixDriver(filepath: string, platform = os.platform()): string {
+  if (platform != 'win32' || filepath[1] != ':') return filepath
   return filepath[0].toUpperCase() + filepath.slice(1)
 }

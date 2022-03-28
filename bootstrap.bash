@@ -7,20 +7,23 @@ set -o pipefail
 IFS=$'\n\t'
 
 # /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+
 if [[ "$(uname -s)" == "Darwin" ]]; then
   touch ~/.bash_sessions_disable
-  mkdir -p /usr/local/bin
-  cp ./env-ubuntu-core /usr/local/bin
-  chmod 775 /usr/local/bin/env-ubuntu-core
   brew install coreutils gnu-sed
-  . /usr/local/bin/env-ubuntu-core
   type -t readlink
 fi
+
+# TODO: originally added for mac, but this needs to move into the user's PATH later
+sudo mkdir -p /usr/local/bin
+sudo cp ./env-ubuntu-core /usr/local/bin
+sudo chmod 755 /usr/local/bin/env-ubuntu-core
+. /usr/local/bin/env-ubuntu-core
 
 SCRIPT="$(readlink -e -- "${0}")"
 SCRIPT_DIR="$(dirname "${SCRIPT}")"
 
-exit 1
 
 if [[ "${SCRIPT_DIR}" != "$(readlink -e -- "$(pwd)")" ]]; then
   echo "please execute this script from its own directory"
@@ -60,9 +63,11 @@ else
   sudo DEBIAN_FRONTEND=noninteractive apt-get --assume-yes install -o Dpkg::Options::="--force-overwrite" bat ripgrep
 fi
 
+
 for SCRIPT in installers/*.install; do
   "${SCRIPT}"
 done
+
 
 # this needs to be cleared to make sure old files are not included in later
 # package installations
@@ -74,6 +79,14 @@ rsync \
   --verbose \
   "./home/" \
   "${HOME}"
+
+set +o nounset # deal with old nvm.sh issue
+export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # This loads nvm
+nvm install --lts
+nvm use --lts
+set -o nounset
+node --version
 
 # vim specific stuff
 pushd "${HOME}/.vim/pack/datfinesoul/start/coc.nvim"

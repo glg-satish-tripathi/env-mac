@@ -6,7 +6,7 @@ import { v4 as uuid } from 'uuid'
 import { omit } from '../util/lodash'
 // const logger = require('../util/logger')('codeActionManager')
 
-export default class CodeLensManager extends Manager<CodeLensProvider> implements Disposable {
+export default class CodeLensManager extends Manager<CodeLensProvider> {
 
   public register(selector: DocumentSelector, provider: CodeLensProvider): Disposable {
     let item: ProviderItem<CodeLensProvider> = {
@@ -34,7 +34,7 @@ export default class CodeLensManager extends Manager<CodeLensProvider> implement
             (item as any).source = id
           }
         }
-        return res || []
+        return res
       })
     }))
     return [].concat(...arr)
@@ -47,16 +47,12 @@ export default class CodeLensManager extends Manager<CodeLensProvider> implement
     // no need to resolve
     if (codeLens.command) return codeLens
     let { source } = codeLens as any
-    let provider = this.poviderById(source)
+    let provider = this.getProviderById(source)
     if (!provider || typeof provider.resolveCodeLens != 'function') {
       return codeLens
     }
     let res = await Promise.resolve(provider.resolveCodeLens(omit(codeLens, ['source']), token))
     Object.assign(codeLens, res)
     return codeLens
-  }
-
-  public dispose(): void {
-    this.providers = new Set()
   }
 }

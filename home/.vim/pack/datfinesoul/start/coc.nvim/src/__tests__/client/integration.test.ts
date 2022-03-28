@@ -1,14 +1,8 @@
 /* eslint-disable */
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
-'use strict'
-
 import helper from '../helper'
 import * as assert from 'assert'
 import * as lsclient from '../../language-client'
-import * as path from 'path'
+import path from 'path'
 
 beforeAll(async () => {
   await helper.setup()
@@ -18,21 +12,17 @@ afterAll(async () => {
   await helper.shutdown()
 })
 
-afterEach(async () => {
-  await helper.reset()
-})
-
-async function testLanguageServer(serverOptions: lsclient.ServerOptions): Promise<void> {
+async function testLanguageServer(serverOptions: lsclient.ServerOptions): Promise<lsclient.LanguageClient> {
   let clientOptions: lsclient.LanguageClientOptions = {
     documentSelector: ['css'],
     synchronize: {},
     initializationOptions: {}
   }
   let client = new lsclient.LanguageClient('css', 'Test Language Server', serverOptions, clientOptions)
-  let disposable = client.start()
+  client.start()
   await client.onReady()
   expect(client.initializeResult).toBeDefined()
-  disposable.dispose()
+  return client
 }
 
 describe('Client integration', () => {
@@ -52,13 +42,11 @@ describe('Client integration', () => {
           assert.ok(Array.isArray(diagnostics))
           assert.equal(diagnostics.length, 0)
           next(uri, diagnostics)
-          disposable.dispose()
-          done()
         }
       }
     }
     let client = new lsclient.LanguageClient('css', 'Test Language Server', serverOptions, clientOptions)
-    let disposable = client.start()
+    client.start()
 
     assert.equal(client.initializeResult, undefined)
 
@@ -78,12 +66,14 @@ describe('Client integration', () => {
           }
         }
         assert.deepEqual(client.initializeResult, expected)
+        setTimeout(async () => {
+          await client.stop()
+          done()
+        }, 50)
       } catch (e) {
-        disposable.dispose()
         done(e)
       }
     }, e => {
-      disposable.dispose()
       done(e)
     })
   })
@@ -94,7 +84,8 @@ describe('Client integration', () => {
       module: serverModule,
       transport: lsclient.TransportKind.stdio
     }
-    await testLanguageServer(serverOptions)
+    let client = await testLanguageServer(serverOptions)
+    await client.stop()
   })
 
   it('should initialize use pipe', async () => {
@@ -103,7 +94,8 @@ describe('Client integration', () => {
       module: serverModule,
       transport: lsclient.TransportKind.pipe
     }
-    await testLanguageServer(serverOptions)
+    let client = await testLanguageServer(serverOptions)
+    await client.stop()
   })
 
   it('should initialize use socket', async () => {
@@ -115,7 +107,8 @@ describe('Client integration', () => {
         port: 8088
       }
     }
-    await testLanguageServer(serverOptions)
+    let client = await testLanguageServer(serverOptions)
+    await client.stop()
   })
 
   it('should initialize as command', async () => {
@@ -124,6 +117,7 @@ describe('Client integration', () => {
       command: 'node',
       args: [serverModule, '--stdio']
     }
-    await testLanguageServer(serverOptions)
+    let client = await testLanguageServer(serverOptions)
+    await client.stop()
   })
 })

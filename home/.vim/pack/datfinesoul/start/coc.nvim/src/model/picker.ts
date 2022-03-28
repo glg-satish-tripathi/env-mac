@@ -1,10 +1,9 @@
 import { Buffer, Neovim } from '@chemzqm/neovim'
 import { CancellationToken, Disposable, Emitter, Event } from 'vscode-languageserver-protocol'
-import { DialogPreferences } from '..'
 import events from '../events'
-import { QuickPickItem } from '../types'
 import { disposeAll } from '../util'
 import { byteLength } from '../util/string'
+import { DialogPreferences } from './dialog'
 import Popup from './popup'
 const logger = require('../util/logger')('model-dialog')
 const isVim = process.env.VIM_NODE_RPC == '1'
@@ -12,6 +11,28 @@ const isVim = process.env.VIM_NODE_RPC == '1'
 interface PickerConfig {
   title: string
   items: QuickPickItem[]
+}
+
+/**
+ * Represents an item that can be selected from
+ * a list of items.
+ */
+export interface QuickPickItem {
+
+  /**
+   * A human-readable string which is rendered prominent
+   */
+  label: string
+
+  /**
+   * A human-readable string which is rendered less prominent in the same line
+   */
+  description?: string
+
+  /**
+   * Optional flag indicating if this item is picked initially.
+   */
+  picked?: boolean
 }
 
 /**
@@ -118,8 +139,7 @@ export default class Picker {
       this.setCursor(idx)
       this.win.refreshScrollbar()
       nvim.command('redraw', true)
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      nvim.resumeNotification(false, true)
+      void nvim.resumeNotification(false, true)
     }
     this.addKeys(['j', '<down>', '<tab>', '<C-n>'], () => {
       // next
@@ -146,8 +166,7 @@ export default class Picker {
         this.setCursor(this.currIndex + 1)
       }
       nvim.command('redraw', true)
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      await nvim.resumeNotification()
+      void await nvim.resumeNotification()
     })
     this.addKeys('<C-f>', async () => {
       await this.win?.scrollForward()
@@ -202,8 +221,7 @@ export default class Picker {
       buf.addHighlight({ hlGroup: 'Comment', line: pos[0], srcId: 1, colStart: pos[1], colEnd: -1 })
     }
     nvim.command('redraw', true)
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    nvim.resumeNotification(false, true)
+    await nvim.resumeNotification()
     nvim.call('coc#prompt#start_prompt', ['picker'], true)
     return res[0]
   }
@@ -213,8 +231,9 @@ export default class Picker {
   }
 
   public dispose(): void {
+    this.picked.clear()
+    this.keyMappings.clear()
     disposeAll(this.disposables)
-    this.disposables = []
     this.nvim.call('coc#prompt#stop_prompt', ['picker'], true)
     this.win?.close()
     this.win = undefined

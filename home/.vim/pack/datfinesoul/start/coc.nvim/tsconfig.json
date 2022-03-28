@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "outDir": "lib",
+    "noEmit": true,
     "sourceMap": true,
     "importHelpers": true,
     "allowUnreachableCode": false,
@@ -13,7 +14,6 @@
     "target": "es2017",
     "module": "commonjs",
     "moduleResolution": "node",
-    "experimentalDecorators": true,
     "lib": ["es2017", "es2018", "es2019"],
     "declaration": false,
     "resolveJsonModule": true,
@@ -23,5 +23,5 @@
     "plugins": []
   },
   "include": ["src"],
-  "exclude": ["typings"]
+  "exclude": ["typings", "build", "node_modules"]
 }

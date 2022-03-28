@@ -4,7 +4,7 @@ import { TypeDefinitionProvider } from './index'
 import Manager, { ProviderItem } from './manager'
 import { v4 as uuid } from 'uuid'
 
-export default class TypeDefinitionManager extends Manager<TypeDefinitionProvider> implements Disposable {
+export default class TypeDefinitionManager extends Manager<TypeDefinitionProvider> {
 
   public register(selector: DocumentSelector, provider: TypeDefinitionProvider): Disposable {
     let item: ProviderItem<TypeDefinitionProvider> = {
@@ -29,10 +29,6 @@ export default class TypeDefinitionManager extends Manager<TypeDefinitionProvide
       let { provider } = item
       return Promise.resolve(provider.provideTypeDefinition(document, position, token))
     }))
-    return this.mergeDefinitions(arr)
-  }
-
-  public dispose(): void {
-    this.providers = new Set()
+    return this.toLocations(arr)
   }
 }

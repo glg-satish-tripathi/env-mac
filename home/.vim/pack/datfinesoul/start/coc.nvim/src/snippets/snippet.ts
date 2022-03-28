@@ -1,6 +1,6 @@
 import { Position, Range, TextEdit } from 'vscode-languageserver-protocol'
 import { TextDocument } from 'vscode-languageserver-textdocument'
-import { adjustPosition, comparePosition, editRange, getChangedPosition, rangeInRange } from '../util/position'
+import { adjustPosition, comparePosition, editRange, getChangedPosition, rangeInRange, isSingleLine } from '../util/position'
 import * as Snippets from "./parser"
 import { VariableResolver } from './parser'
 import { byteLength } from '../util/string'
@@ -20,13 +20,16 @@ export interface CocSnippetPlaceholder {
 }
 
 export class CocSnippet {
-  private _parser: Snippets.SnippetParser = new Snippets.SnippetParser()
+  private _parser: Snippets.SnippetParser
   private _placeholders: CocSnippetPlaceholder[]
   private tmSnippet: Snippets.TextmateSnippet
 
   constructor(private _snippetString: string,
     private position: Position,
-    private _variableResolver?: VariableResolver) {
+    private _variableResolver?: VariableResolver,
+    _ultisnip = false
+  ) {
+    this._parser = new Snippets.SnippetParser(_ultisnip)
   }
 
   public async init(): Promise<void> {
@@ -49,9 +52,23 @@ export class CocSnippet {
   }
 
   // adjust for edit before snippet
-  public adjustTextEdit(edit: TextEdit): boolean {
+  public adjustTextEdit(edit: TextEdit, changedLine?: string): boolean {
     let { range, newText } = edit
-    if (comparePosition(this.range.start, range.end) < 0) return false
+    if (comparePosition(this.range.start, range.end) < 0) {
+      let { start, end } = range
+      let overlaped = end.character - this.range.start.character
+      // shift single line range to left as far as possible
+      if (changedLine && comparePosition(this.range.start, start) > 0
+        && isSingleLine(range)
+        && start.character - overlaped >= 0
+        && changedLine.slice(start.character - overlaped, start.character) ==
+        changedLine.slice(this.range.start.character, this.range.start.character + overlaped)) {
+        edit.range = range = Range.create(start.line, start.character - overlaped, end.line, end.character - overlaped)
+      } else {
+        return false
+      }
+    }
+
     // check change of placeholder at beginning
     if (!newText.includes('\n')
       && comparePosition(range.start, range.end) == 0
@@ -142,7 +159,7 @@ export class CocSnippet {
     return this._placeholders.find(o => rangeInRange(range, o.range))
   }
 
-  public insertSnippet(placeholder: CocSnippetPlaceholder, snippet: string, range: Range): number {
+  public insertSnippet(placeholder: CocSnippetPlaceholder, snippet: string, range: Range, ultisnip = false): number {
     let { start } = placeholder.range
     // let offset = position.character - start.character
     let editStart = Position.create(
@@ -154,7 +171,7 @@ export class CocSnippet {
       range.end.line == start.line ? range.end.character - start.character : range.end.character
     )
     let editRange = Range.create(editStart, editEnd)
-    let first = this.tmSnippet.insertSnippet(snippet, placeholder.id, editRange)
+    let first = this.tmSnippet.insertSnippet(snippet, placeholder.id, editRange, ultisnip)
     this.update()
     return first
   }
@@ -162,7 +179,7 @@ export class CocSnippet {
   // update internal positions, no change of buffer
   // return TextEdit list when needed
   public updatePlaceholder(placeholder: CocSnippetPlaceholder, edit: TextEdit): { edits: TextEdit[]; delta: number } {
-    let { start, end } = edit.range
+    // let { start, end } = edit.range
     let { range } = this
     let { value, id, index } = placeholder
     let newText = editRange(placeholder.range, value, edit)
@@ -221,7 +238,7 @@ export class CocSnippet {
         index = p.index
       }
       const value = p.toString()
-      const lines = value.split('\n')
+      const lines = value.split(/\r?\n/)
       let res: CocSnippetPlaceholder = {
         range: Range.create(start, {
           line: start.line + lines.length - 1,

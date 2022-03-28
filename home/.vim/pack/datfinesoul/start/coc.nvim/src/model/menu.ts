@@ -1,14 +1,27 @@
 import { Buffer, Neovim } from '@chemzqm/neovim'
 import { CancellationToken, Disposable, Emitter, Event } from 'vscode-languageserver-protocol'
-import { DialogPreferences } from '..'
 import events from '../events'
+import { HighlightItem } from '../types'
 import { disposeAll } from '../util'
+import { byteLength, isAlphabet } from '../util/string'
+import { DialogPreferences } from './dialog'
 import Popup from './popup'
 const logger = require('../util/logger')('model-menu')
 
+export interface MenuItem {
+  text: string
+  disabled?: boolean | { reason: string }
+}
+
 export interface MenuConfig {
-  items: string[]
+  items: string[] | MenuItem[]
   title?: string
+  shortcuts?: boolean
+}
+
+export function isMenuItem(item: any): item is MenuItem {
+  if (!item) return false
+  return typeof item.text === 'string'
 }
 
 /**
@@ -21,13 +34,20 @@ export default class Menu {
   private total: number
   private disposables: Disposable[] = []
   private keyMappings: Map<string, (character: string) => void> = new Map()
+  private shortcutIndexes: Set<number> = new Set()
+  private _disposed = false
   private readonly _onDidClose = new Emitter<number>()
   public readonly onDidClose: Event<number> = this._onDidClose.event
   constructor(private nvim: Neovim, private config: MenuConfig, token?: CancellationToken) {
     this.total = config.items.length
     if (token) {
       token.onCancellationRequested(() => {
-        this.win?.close()
+        if (this.win) {
+          this.win?.close()
+        } else {
+          this._onDidClose.fire(-1)
+          this.dispose()
+        }
       })
     }
     this.disposables.push(this._onDidClose)
@@ -39,8 +59,6 @@ export default class Menu {
     events.on('BufWinLeave', bufnr => {
       if (bufnr == this.bufnr) {
         this._onDidClose.fire(-1)
-        this.bufnr = undefined
-        this.win = undefined
         this.dispose()
       }
     }, null, this.disposables)
@@ -53,8 +71,7 @@ export default class Menu {
       this.dispose()
     })
     this.addKeys(['\r', '<cr>'], () => {
-      this._onDidClose.fire(this.currIndex)
-      this.dispose()
+      this.selectCurrent()
     })
     let setCursorIndex = idx => {
       if (!this.win) return
@@ -89,6 +106,12 @@ export default class Menu {
     })
     let timer: NodeJS.Timeout
     let firstNumber: number
+    const choose = (n: number) => {
+      let disabled = this.isDisabled(n)
+      if (disabled) return
+      this._onDidClose.fire(n)
+      this.dispose()
+    }
     this.addKeys(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], character => {
       if (timer) clearTimeout(timer)
       let n = parseInt(character, 10)
@@ -97,25 +120,52 @@ export default class Menu {
       if (firstNumber) {
         let count = firstNumber * 10 + n
         firstNumber = undefined
-        this._onDidClose.fire(count - 1)
-        this.dispose()
+        choose(count - 1)
         return
       }
       if (this.total < 10 || n * 10 > this.total) {
-        this._onDidClose.fire(n - 1)
-        this.dispose()
+        choose(n - 1)
         return
       }
       timer = setTimeout(async () => {
-        this._onDidClose.fire(n - 1)
-        this.dispose()
+        choose(n - 1)
       }, 200)
       firstNumber = n
     })
+    if (this.config.shortcuts) {
+      this.addShortcuts(choose)
+    }
+  }
+
+  private addShortcuts(choose: (idx: number) => void): void {
+    let { items } = this.config
+    let texts: string[] = items.map(o => {
+      return isMenuItem(o) ? o.text : o
+    })
+    texts.forEach((text, idx) => {
+      if (text.length) {
+        let s = text[0]
+        if (isAlphabet(s.charCodeAt(0)) && !this.keyMappings.has(s)) {
+          this.shortcutIndexes.add(idx)
+          this.addKeys(s, () => {
+            choose(idx)
+          })
+        }
+      }
+    })
+  }
+
+  private isDisabled(idx: number): boolean {
+    let { items } = this.config
+    let item = items[idx]
+    if (isMenuItem(item) && item.disabled) {
+      return true
+    }
+    return false
   }
 
   public async show(preferences: DialogPreferences = {}): Promise<number> {
-    let { nvim } = this
+    let { nvim, shortcutIndexes } = this
     let { title, items } = this.config
     let opts: any = {}
     if (title) opts.title = title
@@ -123,17 +173,41 @@ export default class Menu {
     if (preferences.maxWidth) opts.maxWidth = preferences.maxWidth
     if (preferences.floatHighlight) opts.highlight = preferences.floatHighlight
     if (preferences.floatBorderHighlight) opts.borderhighlight = [preferences.floatBorderHighlight]
+    let highlights: HighlightItem[] = []
     let lines = items.map((v, i) => {
-      if (i < 99) return `${i + 1}. ${v}`
-      return v
+      let text: string = isMenuItem(v) ? v.text : v
+      let pre = i < 99 ? `${i + 1}. ` : ''
+      // if (i < 99) return `${i + 1}. ${text.trim()}`
+      if (shortcutIndexes.has(i)) {
+        highlights.push({
+          lnum: i,
+          hlGroup: preferences.shortcutHighlight || 'MoreMsg',
+          colStart: byteLength(pre),
+          colEnd: byteLength(pre) + 1
+        })
+      }
+      return pre + text.trim()
     })
+    lines.forEach((line, i) => {
+      let item = items[i]
+      if (isMenuItem(item) && item.disabled) {
+        highlights.push({
+          hlGroup: 'CocDisabled',
+          lnum: i,
+          colStart: 0,
+          colEnd: byteLength(line)
+        })
+      }
+    })
+    if (highlights.length) opts.highlights = highlights
     if (preferences.confirmKey && preferences.confirmKey != '<cr>') {
       this.addKeys(preferences.confirmKey, () => {
-        this._onDidClose.fire(this.currIndex)
-        this.dispose()
+        this.selectCurrent()
       })
     }
     let res = await nvim.call('coc#float#create_menu', [lines, opts]) as [number, number]
+    nvim.command('redraw', true)
+    if (this._disposed) return
     this.win = new Popup(nvim, res[0], res[1])
     this.bufnr = res[1]
     this.attachEvents()
@@ -141,15 +215,31 @@ export default class Menu {
     return res[0]
   }
 
+  private selectCurrent(): void {
+    if (this.isDisabled(this.currIndex)) {
+      let item = this.config.items[this.currIndex] as MenuItem
+      if (item.disabled['reason']) {
+        this.nvim.outWriteLine(`Item disabled: ${item.disabled['reason']}`)
+        // this.nvim.command('redraw', true)
+      }
+      return
+    }
+    this._onDidClose.fire(this.currIndex)
+    this.dispose()
+  }
+
   public get buffer(): Buffer {
     return this.bufnr ? this.nvim.createBuffer(this.bufnr) : undefined
   }
 
   public dispose(): void {
+    this._disposed = true
     disposeAll(this.disposables)
-    this.disposables = []
+    this.shortcutIndexes.clear()
+    this.keyMappings.clear()
     this.nvim.call('coc#prompt#stop_prompt', ['menu'], true)
     this.win?.close()
+    this.bufnr = undefined
     this.win = undefined
   }
 

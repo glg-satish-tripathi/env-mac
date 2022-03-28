@@ -23,26 +23,22 @@ export default class FoldList extends BasicList {
         window.showMessage(`invalid path: ${newPath}`, 'error')
         return
       }
-      workspace.renameWorkspaceFolder(item.label, newPath)
+      workspace.workspaceFolderControl.renameWorkspaceFolder(item.label, newPath)
     })
 
     this.addAction('delete', async item => {
-      workspace.removeWorkspaceFolder(item.label)
+      workspace.workspaceFolderControl.removeWorkspaceFolder(item.label)
     }, { reload: true, persist: true })
 
-    this.addAction('newfile', async item => {
+    this.addAction('newfile', async (item, context) => {
       let file = await window.requestInput('File name', item.label + '/')
       let dir = path.dirname(file)
       let stat = await statAsync(dir)
       if (!stat || !stat.isDirectory()) {
-        let success = await fs.mkdirp(dir)
-        if (!success) {
-          window.showMessage(`Error creating new directory ${dir}`, 'error')
-          return
-        }
+        fs.mkdirpSync(dir)
       }
       await workspace.createFile(file, { overwrite: false, ignoreIfExists: true })
-      await this.jumpTo(URI.file(file).toString())
+      await this.jumpTo(URI.file(file).toString(), null, context)
     })
   }
 

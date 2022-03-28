@@ -1,35 +1,110 @@
 import { Neovim } from '@chemzqm/neovim'
 import fs from 'fs'
-import os from 'os'
 import path from 'path'
-import { CancellationToken, Disposable, Position } from 'vscode-languageserver-protocol'
+import { CancellationToken, Disposable, Emitter, Event, Position, Range } from 'vscode-languageserver-protocol'
 import { URI } from 'vscode-uri'
-import channels from './channels'
+import channels from './core/channels'
+import { TextEditor } from './core/editors'
+import Terminals from './core/terminals'
+import * as ui from './core/ui'
 import events from './events'
-import Dialog from './model/dialog'
-import Menu from './model/menu'
-import Notification from './model/notification'
-import Picker from './model/picker'
-import ProgressNotification from './model/progress'
-import StatusLine from './model/status'
-import { DialogConfig, DialogPreferences, MessageItem, MessageLevel, MsgTypes, NotificationConfig, NotificationPreferences, OpenTerminalOption, OutputChannel, Progress, ProgressOptions, QuickPickItem, ScreenPosition, StatusBarItem, StatusItemOption, TerminalResult } from './types'
+import Dialog, { DialogConfig, DialogPreferences } from './model/dialog'
+import Menu, { isMenuItem, MenuItem } from './model/menu'
+import Notification, { NotificationConfig, NotificationPreferences } from './model/notification'
+import Picker, { QuickPickItem } from './model/picker'
+import ProgressNotification, { Progress } from './model/progress'
+import StatusLine, { StatusBarItem } from './model/status'
+import TerminalModel, { TerminalOptions } from './model/terminal'
+import { TreeView, TreeViewOptions } from './tree'
+import { Env, HighlightDiff, HighlightItem, HighlightItemDef, HighlightItemResult, MenuOption, MessageItem, MessageLevel, MsgTypes, OpenTerminalOption, OutputChannel, ProgressOptions, ScreenPosition, StatusItemOption, TerminalResult } from './types'
 import { CONFIG_FILE_NAME, disposeAll } from './util'
 import { Mutex } from './util/mutex'
+import { equals } from './util/object'
+import { isWindows } from './util/platform'
 import workspace from './workspace'
 const logger = require('./util/logger')('window')
+let tab_global_id = 3000
+
+function converHighlightItem(item: HighlightItem): HighlightItemDef {
+  return [item.hlGroup, item.lnum, item.colStart, item.colEnd, item.combine ? 1 : 0, item.start_incl ? 1 : 0, item.end_incl ? 1 : 0]
+}
+
+function isSame(item: HighlightItem, curr: HighlightItemResult): boolean {
+  let arr = [item.hlGroup, item.lnum, item.colStart, item.colEnd]
+  return equals(arr, curr.slice(0, 4))
+}
 
 class Window {
   private mutex = new Mutex()
+  private tabIds: number[] = []
   private statusLine: StatusLine | undefined
+  private terminalManager: Terminals = new Terminals()
+  private readonly _onDidTabClose = new Emitter<number>()
+  public readonly onDidTabClose: Event<number> = this._onDidTabClose.event
+
+  public init(env: Env): void {
+    for (let i = 1; i <= env.tabCount; i++) {
+      this.tabIds.push(Window.generateTabId())
+    }
+    events.on('TabNew', (nr: number) => {
+      this.tabIds.splice(nr - 1, 0, Window.generateTabId())
+    })
+    events.on('TabClosed', (nr: number) => {
+      let id = this.tabIds[nr - 1]
+      this.tabIds.splice(nr - 1, 1)
+      if (id) this._onDidTabClose.fire(id)
+    })
+  }
+
+  public getTabNumber(id: number): number | undefined {
+    if (!this.tabIds.includes(id)) return undefined
+    return this.tabIds.indexOf(id) + 1
+  }
+
+  public getTabId(nr: number): number | undefined {
+    return this.tabIds[nr - 1]
+  }
 
   public get nvim(): Neovim {
     return workspace.nvim
   }
 
   public dispose(): void {
+    this.terminalManager.dispose()
     this.statusLine?.dispose()
   }
 
+  public get activeTextEditor(): TextEditor | undefined {
+    return workspace.editors.activeTextEditor
+  }
+
+  public get visibleTextEditors(): TextEditor[] {
+    return workspace.editors.visibleTextEditors
+  }
+
+  public get onDidChangeActiveTextEditor(): Event<TextEditor | undefined> {
+    return workspace.editors.onDidChangeActiveTextEditor
+  }
+
+  public get onDidChangeVisibleTextEditors(): Event<ReadonlyArray<TextEditor>> {
+    return workspace.editors.onDidChangeVisibleTextEditors
+  }
+
+  public get terminals(): ReadonlyArray<TerminalModel> {
+    return this.terminalManager.terminals
+  }
+
+  public get onDidOpenTerminal(): Event<TerminalModel> {
+    return this.terminalManager.onDidOpenTerminal
+  }
+
+  public get onDidCloseTerminal(): Event<TerminalModel> {
+    return this.terminalManager.onDidCloseTerminal
+  }
+
+  public async createTerminal(opts: TerminalOptions): Promise<TerminalModel> {
+    return await this.terminalManager.createTerminal(this.nvim, opts)
+  }
   /**
    * Reveal message with message type.
    *
@@ -39,9 +114,7 @@ class Window {
   public showMessage(msg: string, messageType: MsgTypes = 'more'): void {
     if (this.mutex.busy || !this.nvim) return
     let { messageLevel } = this
-    let method = process.env.VIM_NODE_RPC == '1' ? 'callTimer' : 'call'
-    if (global.hasOwnProperty('__TEST__')) logger.info(msg)
-    let hl = 'Error'
+    let hl: 'Error' | 'MoreMsg' | 'WarningMsg' = 'Error'
     let level = MessageLevel.Error
     switch (messageType) {
       case 'more':
@@ -54,7 +127,7 @@ class Window {
         break
     }
     if (level >= messageLevel) {
-      this.nvim[method]('coc#util#echo_messages', [hl, ('[coc.nvim] ' + msg).split('\n')], true)
+      ui.showMessage(this.nvim, msg, hl)
     }
   }
 
@@ -109,19 +182,21 @@ class Window {
    * Use `workspace.env.dialog` to check if the picker window/popup could work.
    *
    * @param items Array of texts.
-   * @param title Optional title of float/popup window.
+   * @param option Options for menu.
    * @param token A token that can be used to signal cancellation.
    * @returns Selected index (0 based), -1 when canceled.
    */
-  public async showMenuPicker(items: string[], title?: string, token?: CancellationToken): Promise<number> {
+  public async showMenuPicker(items: string[] | MenuItem[], option?: MenuOption, token?: CancellationToken): Promise<number> {
     if (workspace.env.dialog) {
       let release = await this.mutex.acquire()
       if (token && token.isCancellationRequested) {
         release()
-        return undefined
+        return -1
       }
       try {
-        let menu = new Menu(this.nvim, { items: items.map(s => s.trim()), title }, token)
+        option = option || {}
+        if (typeof option === 'string') option = { title: option }
+        let menu = new Menu(this.nvim, { items, ...option }, token)
         let promise = new Promise<number>(resolve => {
           menu.onDidClose(selected => {
             resolve(selected)
@@ -135,19 +210,36 @@ class Window {
         logger.error(`Error on showMenuPicker:`, e)
         release()
       }
+    } else {
+      let titles: string[] = items.map(item => {
+        if (isMenuItem(item) && item.disabled) return null
+        return isMenuItem(item) ? item.text : item
+      })
+      return await this.showQuickpick(titles.filter(t => t != null))
     }
-    return await this.showQuickpick(items)
   }
 
   /**
    * Open local config file
    */
   public async openLocalConfig(): Promise<void> {
-    let { root } = workspace
-    if (root == os.homedir()) {
-      this.showMessage(`Can't create local config in home directory`, 'warning')
-      return
+    let fsPath = await this.nvim.call('expand', ['%:p'])
+    let filetype = await this.nvim.eval('&filetype') as string
+    if (!fsPath || !path.isAbsolute(fsPath)) {
+      throw new Error(`current buffer doesn't have valid file path.`)
     }
+    let folder = workspace.getWorkspaceFolder(URI.file(fsPath).toString())
+    if (!folder) {
+      let c = workspace.getConfiguration('coc.preferences')
+      let patterns = c.get<string[]>('rootPatterns', [])
+      let w = workspace.getConfiguration('workspace')
+      let ignored = w.get<string[]>('ignoredFiletypes', [])
+      if (ignored.includes(filetype)) {
+        throw new Error(`Can't resolve workspace folder for current file, current filetype exclude for workspace folder resolve.`)
+      }
+      throw new Error(`Can't resolve workspace folder for current file, consider create one of ${patterns.join(', ')} in your project root.`)
+    }
+    let root = URI.parse(folder.uri).fsPath
     let dir = path.join(root, '.vim')
     if (!fs.existsSync(dir)) {
       let res = await this.showPrompt(`Would you like to create folder'${root}/.vim'?`)
@@ -167,9 +259,9 @@ class Window {
   public async showPrompt(title: string): Promise<boolean> {
     let release = await this.mutex.acquire()
     try {
-      let res = await this.nvim.callAsync('coc#float#prompt_confirm', [title])
+      let res = await ui.showPrompt(this.nvim, title)
       release()
-      return res == 1
+      return res
     } catch (e) {
       release()
       return false
@@ -200,7 +292,7 @@ class Window {
   public async requestInput(title: string, defaultValue?: string): Promise<string> {
     let { nvim } = this
     const preferences = workspace.getConfiguration('coc.preferences')
-    if (workspace.env.dialog && preferences.get<boolean>('promptInput', true)) {
+    if (workspace.env.dialog && preferences.get<boolean>('promptInput', true) && !isWindows) {
       let release = await this.mutex.acquire()
       let preferences = this.dialogPreference
       try {
@@ -313,10 +405,8 @@ class Window {
    *
    * @returns Cursor position.
    */
-  public async getCursorPosition(): Promise<Position> {
-    // vim can't count utf16
-    let [line, content] = await this.nvim.eval(`[line('.')-1, strpart(getline('.'), 0, col('.') - 1)]`) as [number, string]
-    return Position.create(line, content.length)
+  public getCursorPosition(): Promise<Position> {
+    return ui.getCursorPosition(this.nvim)
   }
 
   /**
@@ -325,18 +415,31 @@ class Window {
    * @param position LSP position.
    */
   public async moveTo(position: Position): Promise<void> {
-    await this.nvim.call('coc#util#jumpTo', [position.line, position.character])
-    if (workspace.env.isVim) this.nvim.command('redraw', true)
+    await ui.moveTo(this.nvim, position, workspace.env.isVim)
+  }
+
+  /**
+   * Get selected range for current document
+   */
+  public getSelectedRange(mode: string): Promise<Range | null> {
+    return ui.getSelection(this.nvim, mode)
+  }
+
+  /**
+   * Visual select range of current document
+   */
+  public async selectRange(range: Range): Promise<void> {
+    await ui.selectRange(this.nvim, range, this.nvim.isVim)
   }
 
   /**
    * Get current cursor character offset in document,
    * length of line break would always be 1.
    *
-   * @returns Charactor offset.
+   * @returns Character offset.
    */
-  public async getOffset(): Promise<number> {
-    return await this.nvim.call('coc#util#get_offset') as number
+  public getOffset(): Promise<number> {
+    return ui.getOffset(this.nvim)
   }
 
   /**
@@ -345,9 +448,8 @@ class Window {
    *
    * @returns Cursor screen position.
    */
-  public async getCursorScreenPosition(): Promise<ScreenPosition> {
-    let [row, col] = await this.nvim.call('coc#util#cursor_pos') as [number, number]
-    return { row, col }
+  public getCursorScreenPosition(): Promise<ScreenPosition> {
+    return ui.getCursorScreenPosition(this.nvim)
   }
 
   /**
@@ -487,6 +589,120 @@ class Window {
     return await progress.show(this.notificationPreference)
   }
 
+  /**
+   * Create a {@link TreeView} instance.
+   *
+   * @param viewId Id of the view, used as title of TreeView when title not exists.
+   * @param options Options for creating the {@link TreeView}
+   * @returns a {@link TreeView}.
+   */
+  public createTreeView<T>(viewId: string, options: TreeViewOptions<T>): TreeView<T> {
+    const BasicTreeView = require('./tree/TreeView').default
+    return new BasicTreeView(viewId, options)
+  }
+
+  /**
+   * Get diff from highlight items and current highlights on vim.
+   * Return null when buffer not loaded
+   *
+   * @param {number} bufnr Buffer number
+   * @param {string} ns Highlight namespace
+   * @param {HighlightItem[]} items Highlight items
+   * @returns {Promise<HighlightDiff | null>}
+   */
+  public async diffHighlights(bufnr: number, ns: string, items: HighlightItem[], token?: CancellationToken): Promise<HighlightDiff | null> {
+    let curr = await this.nvim.call('coc#highlight#get_highlights', [bufnr, ns]) as HighlightItemResult[]
+    if (!curr || token?.isCancellationRequested) return null
+    items.sort((a, b) => a.lnum - b.lnum)
+    let linesToRmove = []
+    let checkMarkers = workspace.has('nvim-0.6.0')
+    let removeMarkers = []
+    let newItems: HighlightItemDef[] = []
+    let itemIndex = 0
+    let maxIndex = items.length - 1
+    let maxLnum = 0
+    // highlights on vim
+    let map: Map<number, HighlightItemResult[]> = new Map()
+    curr.forEach(o => {
+      let arr = map.get(o[1]) || []
+      arr.push(o)
+      maxLnum = Math.max(maxLnum, o[1])
+      map.set(o[1], arr)
+    })
+    for (let i = 0; i <= maxLnum; i++) {
+      let exists = map.get(i) || []
+      let added: HighlightItem[] = []
+      for (let j = itemIndex; j <= maxIndex; j++) {
+        let o = items[j]
+        if (o.lnum == i) {
+          itemIndex = j + 1
+          added.push(o)
+        } else {
+          itemIndex = j
+          break
+        }
+      }
+      if (added.length == 0) {
+        if (exists.length) {
+          if (checkMarkers) {
+            removeMarkers.push(...exists.map(o => o[4]))
+          } else {
+            linesToRmove.push(i)
+          }
+        }
+      } else {
+        if (exists.length == 0) {
+          newItems.push(...added.map(o => converHighlightItem(o)))
+        } else if (added.length != exists.length || !(added.every((o, i) => isSame(o, exists[i])))) {
+          if (checkMarkers) {
+            removeMarkers.push(...exists.map(o => o[4]))
+          } else {
+            linesToRmove.push(i)
+          }
+          newItems.push(...added.map(o => converHighlightItem(o)))
+        }
+      }
+    }
+    for (let i = itemIndex; i <= maxIndex; i++) {
+      newItems.push(converHighlightItem(items[i]))
+    }
+    return { remove: linesToRmove, add: newItems, removeMarkers }
+  }
+
+  /**
+   * Apply highlight diffs, normally used with `window.diffHighlights`
+   *
+   * Timer is used to add highlights when there're too many highlight items to add,
+   * the highlight process won't be finished on that case.
+   *
+   * @param {number} bufnr - Buffer name
+   * @param {string} ns - Namespace
+   * @param {number} priority
+   * @param {HighlightDiff} diff
+   * @param {boolean} notify - Use notification, default false.
+   * @returns {Promise<void>}
+   */
+  public async applyDiffHighlights(bufnr: number, ns: string, priority: number, diff: HighlightDiff, notify = false): Promise<void> {
+    let { nvim } = this
+    let { remove, add, removeMarkers } = diff
+    if (remove.length === 0 && add.length === 0 && removeMarkers.length === 0) return
+    nvim.pauseNotification()
+    if (removeMarkers.length) {
+      nvim.call('coc#highlight#del_markers', [bufnr, ns, removeMarkers], true)
+    }
+    if (remove.length) {
+      nvim.call('coc#highlight#clear', [bufnr, ns, remove], true)
+    }
+    if (add.length) {
+      nvim.call('coc#highlight#set', [bufnr, ns, add, priority], true)
+    }
+    if (notify) {
+      void nvim.resumeNotification(true, true)
+    } else {
+      await nvim.resumeNotification(true)
+    }
+  }
+
   private createNotification(borderhighlight: string, message: string, items: string[]): Promise<number> {
     return new Promise(resolve => {
       let config: NotificationConfig = {
@@ -524,6 +740,7 @@ class Window {
       pickerButtons: config.get<boolean>('pickerButtons'),
       pickerButtonShortcut: config.get<boolean>('pickerButtonShortcut'),
       confirmKey: config.get<string>('confirmKey'),
+      shortcutHighlight: config.get<string>('shortcutHighlight')
     }
   }
 
@@ -551,7 +768,7 @@ class Window {
     return config.get<boolean>('enableMessageDialog', false)
   }
 
-  private get messageLevel(): MessageLevel {
+  public get messageLevel(): MessageLevel {
     let config = workspace.getConfiguration('coc.preferences')
     let level = config.get<string>('messageLevel', 'more')
     switch (level) {
@@ -562,6 +779,10 @@ class Window {
       default:
         return MessageLevel.More
     }
+  }
+
+  public static generateTabId(): number {
+    return tab_global_id++
   }
 }
 

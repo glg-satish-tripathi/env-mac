@@ -2,7 +2,7 @@ import { v4 as uuid } from 'uuid'
 import { CancellationToken, Disposable, SymbolInformation } from 'vscode-languageserver-protocol'
 import { WorkspaceSymbolProvider } from './index'
 
-export default class WorkspaceSymbolManager implements Disposable {
+export default class WorkspaceSymbolManager {
   private providers: Map<string, WorkspaceSymbolProvider> = new Map()
 
   public register(provider: WorkspaceSymbolProvider): Disposable {
@@ -22,11 +22,8 @@ export default class WorkspaceSymbolManager implements Disposable {
     let res: SymbolInformation[] = []
     await Promise.all(entries.map(o => {
       let [id, p] = o
-      return Promise.resolve(p.provideWorkspaceSymbols(query, token)).then(item => {
-        if (item) {
-          (item as any).source = id
-          res.push(...item)
-        }
+      return Promise.resolve(p.provideWorkspaceSymbols(query, token)).then(list => {
+        if (list) res.push(...list.map(item => Object.assign({ source: id }, item)))
       })
     }))
     return res
@@ -46,9 +43,5 @@ export default class WorkspaceSymbolManager implements Disposable {
 
   public hasProvider(): boolean {
     return this.providers.size > 0
-  }
-
-  public dispose(): void {
-    this.providers = new Map()
   }
 }

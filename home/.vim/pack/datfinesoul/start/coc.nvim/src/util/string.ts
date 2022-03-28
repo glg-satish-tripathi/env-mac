@@ -1,3 +1,39 @@
+import { Range } from 'vscode-languageserver-protocol'
+
+export function rangeParts(text: string, range: Range): [string, string] {
+  let { start, end } = range
+  let lines = text.split(/\r?\n/)
+  let before = ''
+  let after = ''
+  let len = lines.length
+  // get start and end parts
+  for (let i = 0; i < len; i++) {
+    let curr = lines[i]
+    if (i < start.line) {
+      before += curr + '\n'
+      continue
+    }
+    if (i > end.line) {
+      after += curr + (i == len - 1 ? '' : '\n')
+      continue
+    }
+    if (i == start.line) {
+      before += curr.slice(0, start.character)
+    }
+    if (i == end.line) {
+      after += curr.slice(end.character) + (i == len - 1 ? '' : '\n')
+    }
+  }
+  return [before, after]
+}
+
+export function getCharIndexes(input: string, character: string): number[] {
+  let res: number[] = []
+  for (let i = 0; i < input.length; i++) {
+    if (input[i] == character) res.push(i)
+  }
+  return res
+}
 
 // nvim use utf8
 export function byteLength(str: string): number {
@@ -5,7 +41,7 @@ export function byteLength(str: string): number {
 }
 
 export function upperFirst(str: string): string {
-  return str ? str[0].toUpperCase() + str.slice(1) : ''
+  return str?.length > 0 ? str[0].toUpperCase() + str.slice(1) : ''
 }
 
 export function byteIndex(content: string, index: number): number {
@@ -41,21 +77,11 @@ export function isWord(character: string): boolean {
   if (code > 128) return false
   if (code == 95) return true
   if (code >= 48 && code <= 57) return true
-  if (code >= 65 && code <= 90) return true
-  if (code >= 97 && code <= 122) return true
+  if (isAlphabet(code)) return true
   return false
 }
 
-export function isTriggerCharacter(character: string): boolean {
-  if (!character) return false
-  let code = character.charCodeAt(0)
-  if (code > 128) return false
-  if (code >= 65 && code <= 90) return false
-  if (code >= 97 && code <= 122) return false
-  return true
-}
-
-export function isAsciiLetter(code: number): boolean {
+export function isAlphabet(code: number): boolean {
   if (code >= 65 && code <= 90) return true
   if (code >= 97 && code <= 122) return true
   return false
@@ -72,7 +98,7 @@ function doEqualsIgnoreCase(a: string, b: string, stopAt = a.length): boolean {
       continue
     }
     // a-z A-Z
-    if (isAsciiLetter(codeA) && isAsciiLetter(codeB)) {
+    if (isAlphabet(codeA) && isAlphabet(codeB)) {
       const diff = Math.abs(codeA - codeB)
       if (diff !== 0 && diff !== 32) {
         return false
@@ -91,8 +117,6 @@ function doEqualsIgnoreCase(a: string, b: string, stopAt = a.length): boolean {
 export function equalsIgnoreCase(a: string, b: string): boolean {
   const len1 = a ? a.length : 0
   const len2 = b ? b.length : 0
-  if (len1 !== len2) {
-    return false
-  }
+  if (len1 !== len2) return false
   return doEqualsIgnoreCase(a, b)
 }

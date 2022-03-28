@@ -1,44 +1,52 @@
 import { Neovim } from '@chemzqm/neovim'
 import { Disposable, Emitter, Event, Location, Range, TextDocumentEdit, TextEdit, WorkspaceEdit } from 'vscode-languageserver-protocol'
-import { ConfigurationChangeEvent } from '../../types'
-import workspace from '../../workspace'
-import window from '../../window'
-import { disposeAll } from '../../util'
-import RefactorBuffer, { RefactorConfig, FileItem, RefactorBufferOpts, FileRange, SEPARATOR } from './buffer'
-import BufferSync from '../../model/bufferSync'
-import { getFileLineCount } from '../../util/fs'
-import Search from '../search'
 import { URI } from 'vscode-uri'
+import languages from '../../languages'
+import { ConfigurationChangeEvent, HandlerDelegate } from '../../types'
+import { disposeAll } from '../../util'
+import { getFileLineCount } from '../../util/fs'
+import workspace from '../../workspace'
+import Search from '../search'
+import RefactorBuffer, { FileItem, FileRange, RefactorConfig, SEPARATOR } from './buffer'
 const logger = require('../../util/logger')('handler-refactor')
 
 const name = '__coc_refactor__'
 let refactorId = 0
 
-export { FileItem }
-
 export default class Refactor {
-  private nvim: Neovim
   private srcId: number
-  private timer: NodeJS.Timer
-  private buffers: BufferSync<RefactorBuffer>
-  private optionsMap: Map<number, RefactorBufferOpts> = new Map()
+  private buffers: Map<number, RefactorBuffer> = new Map()
   public config: RefactorConfig
   private disposables: Disposable[] = []
   private readonly _onCreate = new Emitter<number>()
   public readonly onCreate: Event<number> = this._onCreate.event
-  constructor() {
-    this.nvim = workspace.nvim
-    if (workspace.isNvim && this.nvim.hasFunction('nvim_buf_set_virtual_text')) {
-      this.srcId = workspace.createNameSpace('coc-refactor')
-    }
+  constructor(
+    private nvim: Neovim,
+    private handler: HandlerDelegate
+  ) {
     this.setConfiguration()
     workspace.onDidChangeConfiguration(this.setConfiguration, this, this.disposables)
-    this.buffers = new BufferSync(doc => {
-      if (!/__coc_refactor__\d+$/.test(doc.uri)) return undefined
-      let { bufnr } = doc
-      this._onCreate.fire(bufnr)
-      return new RefactorBuffer(bufnr, this.srcId, this.nvim, this.config, this.optionsMap.get(doc.bufnr))
-    }, workspace)
+    workspace.onDidCloseTextDocument(e => {
+      let buf = this.buffers.get(e.bufnr)
+      if (buf) {
+        buf.dispose()
+        this.buffers.delete(e.bufnr)
+      }
+    }, null, this.disposables)
+    workspace.onDidChangeTextDocument(e => {
+      let buf = this.buffers.get(e.bufnr)
+      if (buf) buf.onChange(e)
+    }, null, this.disposables)
+  }
+
+  public async init(): Promise<void> {
+    if (workspace.isNvim && this.nvim.hasFunction('nvim_create_namespace')) {
+      this.srcId = await this.nvim.createNamespace('coc-refactor')
+    }
+  }
+
+  public has(bufnr: number): boolean {
+    return this.buffers.has(bufnr)
   }
 
   private setConfiguration(e?: ConfigurationChangeEvent): void {
@@ -52,28 +60,27 @@ export default class Refactor {
     })
   }
 
-  private async ensureBuffer(bufnr: number): Promise<RefactorBuffer> {
-    let buf = this.getBuffer(bufnr)
-    if (buf) return buf
-    return new Promise((resolve, reject) => {
-      let timer = this.timer = setTimeout(() => {
-        reject(new Error('Document create timeout after 2s.'))
-      }, 2000)
-      this.onCreate(e => {
-        if (e == bufnr) {
-          clearTimeout(timer)
-          this.timer = null
-          // need wait
-          setImmediate(() => {
-            resolve(this.buffers.getItem(bufnr))
-          })
-        }
-      })
+  /**
+   * Refactor of current symbol
+   */
+  public async doRefactor(): Promise<void> {
+    let { doc, position } = await this.handler.getCurrentState()
+    if (!languages.hasProvider('rename', doc.textDocument)) {
+      throw new Error(`Rename provider not found for current buffer`)
+    }
+    await doc.synchronize()
+    let edit = await this.handler.withRequestToken('refactor', async token => {
+      let res = await languages.prepareRename(doc.textDocument, position, token)
+      if (token.isCancellationRequested) return null
+      if (res === false) throw new Error(`Provider returns null on prepare, unable to rename at current position`)
+      let edit = await languages.provideRenameEdits(doc.textDocument, position, 'NewName', token)
+      if (token.isCancellationRequested) return null
+      if (!edit) throw new Error('Provider returns null for rename edits.')
+      return edit
     })
-  }
-
-  public getBuffer(bufnr: number): RefactorBuffer {
-    return this.buffers.getItem(bufnr)
+    if (edit) {
+      await this.fromWorkspaceEdit(edit, doc.filetype)
+    }
   }
 
   /**
@@ -81,10 +88,18 @@ export default class Refactor {
    */
   public async search(args: string[]): Promise<void> {
     let buf = await this.createRefactorBuffer()
-    if (!buf) return
     let cwd = await this.nvim.call('getcwd', [])
     let search = new Search(this.nvim)
     await search.run(args, cwd, buf)
+  }
+
+  public async save(bufnr: number): Promise<boolean> {
+    let buf = this.buffers.get(bufnr)
+    if (buf) return await buf.save()
+  }
+
+  public getBuffer(bufnr: number): RefactorBuffer {
+    return this.buffers.get(bufnr)
   }
 
   /**
@@ -107,14 +122,13 @@ export default class Refactor {
     if (filetype) nvim.command(`runtime! syntax/${filetype}.vim`, true)
     nvim.call('coc#util#do_autocmd', ['CocRefactorOpen'], true)
     let [, err] = await nvim.resumeNotification()
-    if (err) {
-      logger.error(err)
-      window.showMessage(`Error on open refactor window: ${err}`, 'error')
-      return
-    }
+    if (err) throw new Error(`Error on create refactor buffer: ${err[2]}`)
     let [bufnr, win] = await nvim.eval('[bufnr("%"),win_getid()]') as [number, number]
-    this.optionsMap.set(bufnr, { fromWinid, winid: win, cwd })
-    return await this.ensureBuffer(bufnr)
+    let opts = { fromWinid, winid: win, cwd }
+    await workspace.document
+    let buf = new RefactorBuffer(bufnr, this.srcId, this.nvim, this.config, opts)
+    this.buffers.set(bufnr, buf)
+    return buf
   }
 
   /**
@@ -122,7 +136,7 @@ export default class Refactor {
    */
   public async fromLines(lines: string[]): Promise<RefactorBuffer> {
     let buf = await this.createRefactorBuffer()
-    if (buf) await buf.buffer.setLines(lines, { start: 0, end: -1, strictIndexing: false })
+    await buf.buffer.setLines(lines, { start: 0, end: -1, strictIndexing: false })
     return buf
   }
 
@@ -130,7 +144,7 @@ export default class Refactor {
    * Create refactor buffer from locations
    */
   public async fromLocations(locations: Location[], filetype?: string): Promise<RefactorBuffer> {
-    if (!locations || locations.length == 0) return null
+    if (!locations || locations.length == 0) return undefined
     let changes: { [uri: string]: TextEdit[] } = {}
     let edit: WorkspaceEdit = { changes }
     for (let location of locations) {
@@ -154,9 +168,7 @@ export default class Refactor {
       for (let change of documentChanges || []) {
         if (TextDocumentEdit.is(change)) {
           let { textDocument, edits } = change
-          if (textDocument.uri.startsWith('file:')) {
-            changes[textDocument.uri] = edits
-          }
+          changes[textDocument.uri] = edits
         }
       }
     }
@@ -193,11 +205,6 @@ export default class Refactor {
     return buf
   }
 
-  public async save(bufnr: number): Promise<boolean> {
-    let buf = this.buffers.getItem(bufnr)
-    if (buf) return await buf.save()
-  }
-
   private async getLineCount(uri: string): Promise<number> {
     let doc = workspace.getDocument(uri)
     if (doc) return doc.lineCount
@@ -205,20 +212,18 @@ export default class Refactor {
   }
 
   public reset(): void {
-    if (this.timer) {
-      clearTimeout(this.timer)
+    for (let buf of this.buffers.values()) {
+      buf.dispose()
     }
-    this.optionsMap.clear()
-    this.buffers.reset()
+    this.buffers.clear()
   }
 
   public dispose(): void {
-    if (this.timer) {
-      clearTimeout(this.timer)
-    }
-    this.optionsMap.clear()
     this._onCreate.dispose()
-    this.buffers.dispose()
+    for (let buf of this.buffers.values()) {
+      buf.dispose()
+    }
+    this.buffers.clear()
     disposeAll(this.disposables)
   }
 }
@@ -228,7 +233,7 @@ function adjustRange(range: Range, offset: number): Range {
   return Range.create(start.line - offset, start.character, end.line - offset, end.character)
 }
 
-function emptyWorkspaceEdit(edit: WorkspaceEdit): boolean {
+export function emptyWorkspaceEdit(edit: WorkspaceEdit): boolean {
   let { changes, documentChanges } = edit
   if (documentChanges && documentChanges.length) return false
   if (changes && Object.keys(changes).length) return false

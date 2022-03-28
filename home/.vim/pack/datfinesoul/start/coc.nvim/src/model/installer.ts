@@ -1,10 +1,10 @@
 import { EventEmitter } from 'events'
 import { spawn } from 'child_process'
+import { parse, ParseError } from 'jsonc-parser'
 import readline from 'readline'
 import fs from 'fs-extra'
 import os from 'os'
 import path from 'path'
-import rc from 'rc'
 import semver from 'semver'
 import workspace from '../workspace'
 import download from './download'
@@ -20,9 +20,28 @@ export interface Info {
 }
 
 function registryUrl(scope = 'coc.nvim'): string {
-  const result = rc('npm', { registry: 'https://registry.npmjs.org/' })
-  const registry = result[`${scope}:registry`] || result.config_registry || result.registry as string
-  return registry.endsWith('/') ? registry : registry + '/'
+  let res = 'https://registry.npmjs.org/'
+  let filepath = path.join(os.homedir(), '.npmrc')
+  if (fs.existsSync(filepath)) {
+    try {
+      let content = fs.readFileSync(filepath, 'utf8')
+      let obj = {}
+      for (let line of content.split(/\r?\n/)) {
+        if (line.indexOf('=') > -1) {
+          let [_, key, val] = line.match(/^(.*?)=(.*)$/)
+          obj[key] = val
+        }
+      }
+      if (obj[`${scope}:registry`]) {
+        res = obj[`${scope}:registry`]
+      } else if (obj['registry']) {
+        res = obj['registry']
+      }
+    } catch (e) {
+      logger.error('Error on read .npmrc:', e.message)
+    }
+  }
+  return res.endsWith('/') ? res : res + '/'
 }
 
 export class Installer extends EventEmitter {
@@ -40,14 +59,31 @@ export class Installer extends EventEmitter {
     if (/^https?:/.test(def)) {
       this.url = def
     } else {
-      if (def.includes('@')) {
-        let [name, version] = def.split('@', 2)
-        this.name = name
-        this.version = version
+      if (def.startsWith('@')) {
+        // @author/package
+        const idx = def.indexOf('@', 1)
+        if (idx > 1) {
+          // @author/package@1.0.0
+          this.name = def.substring(0, idx)
+          this.version = def.substring(idx + 1)
+        } else {
+          this.name = def
+        }
       } else {
-        this.name = def
+        if (def.includes('@')) {
+          // name@1.0.0
+          let [name, version] = def.split('@', 2)
+          this.name = name
+          this.version = version
+        } else {
+          this.name = def
+        }
       }
     }
+  }
+
+  public get info() {
+    return { name: this.name, version: this.version }
   }
 
   public async install(): Promise<string> {
@@ -105,7 +141,7 @@ export class Installer extends EventEmitter {
         return
       }
     }
-    let tmpFolder = await fs.mkdtemp(path.join(os.tmpdir(), `${info.name}-`))
+    let tmpFolder = await fs.mkdtemp(path.join(os.tmpdir(), `${info.name.replace('/', '-')}-`))
     let url = info['dist.tarball']
     this.log(`Downloading from ${url}`)
     await download(url, { dest: tmpFolder, onProgress: p => this.log(`Download progress ${p}%`, true), extract: 'untar' })
@@ -114,11 +150,11 @@ export class Installer extends EventEmitter {
     let { dependencies } = JSON.parse(content)
     if (dependencies && Object.keys(dependencies).length) {
       let p = new Promise<void>((resolve, reject) => {
-        let args = ['install', '--ignore-scripts', '--no-lockfile', '--production']
+        let args = ['install', '--ignore-scripts', '--no-lockfile', '--production', '--no-global']
         if (url.startsWith('https://github.com')) {
           args = ['install']
         }
-        if (this.npm.endsWith('npm') && !this.npm.endsWith('pnpm')) {
+        if ((this.npm.endsWith('npm') || this.npm.endsWith('npm.CMD')) && !this.npm.endsWith('pnpm')) {
           args.push('--legacy-peer-deps')
         }
         if (this.npm.endsWith('yarn')) {
@@ -153,7 +189,11 @@ export class Installer extends EventEmitter {
       await p
     }
     let jsonFile = path.resolve(this.root, global.hasOwnProperty('__TEST__') ? '' : '..', 'package.json')
-    let obj = JSON.parse(fs.readFileSync(jsonFile, 'utf8'))
+    let errors: ParseError[] = []
+    let obj = parse(fs.readFileSync(jsonFile, 'utf8'), errors, { allowTrailingComma: true })
+    if (errors && errors.length > 0) {
+      throw new Error(`Error on load ${jsonFile}`)
+    }
     obj.dependencies = obj.dependencies || {}
     if (this.url) {
       obj.dependencies[info.name] = this.url
@@ -182,7 +222,8 @@ export class Installer extends EventEmitter {
     if (this.url) return await this.getInfoFromUri()
     let registry = registryUrl()
     this.log(`Get info from ${registry}`)
-    let res = await fetch(registry + this.name, { timeout: 10000 }) as any
+    let buffer = await fetch(registry + this.name, { timeout: 10000, buffer: true })
+    let res = JSON.parse(buffer.toString())
     if (!this.version) this.version = res['dist-tags']['latest']
     let obj = res['versions'][this.version]
     if (!obj) throw new Error(`${this.def} doesn't exists in ${registry}.`)
@@ -204,13 +245,20 @@ export class Installer extends EventEmitter {
       throw new Error(`"${url}" is not supported, coc.nvim support github.com only`)
     }
     url = url.replace(/\/$/, '')
-    let fileUrl = url.replace('github.com', 'raw.githubusercontent.com') + '/master/package.json'
+    let branch = 'master'
+    if (url.includes('@')) {
+      // https://github.com/sdras/vue-vscode-snippets@main
+      let idx = url.indexOf('@')
+      branch = url.substr(idx + 1)
+      url = url.substring(0, idx)
+    }
+    let fileUrl = url.replace('github.com', 'raw.githubusercontent.com') + `/${branch}/package.json`
     this.log(`Get info from ${fileUrl}`)
     let content = await fetch(fileUrl, { timeout: 10000 })
     let obj = typeof content == 'string' ? JSON.parse(content) : content
     this.name = obj.name
     return {
-      'dist.tarball': `${url}/archive/master.tar.gz`,
+      'dist.tarball': `${url}/archive/${branch}.tar.gz`,
       'engines.coc': obj['engines'] ? obj['engines']['coc'] : null,
       name: obj.name,
       version: obj.version

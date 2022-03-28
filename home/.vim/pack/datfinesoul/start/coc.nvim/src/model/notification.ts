@@ -1,10 +1,46 @@
 import { Neovim } from '@chemzqm/neovim'
 import { Disposable } from 'vscode-languageserver-protocol'
 import events from '../events'
-import { NotificationConfig, NotificationPreferences } from '../types'
 import { disposeAll } from '../util'
-const isVim = process.env.VIM_NODE_RPC == '1'
+import { DialogButton } from './dialog'
 const logger = require('../util/logger')('model-notification')
+
+export interface NotificationPreferences {
+  top: number
+  right: number
+  maxWidth: number
+  maxHeight: number
+  highlight: string
+  minProgressWidth: number
+}
+
+export interface NotificationConfig {
+  content: string
+  /**
+   * Optional title text.
+   */
+  title?: string
+  /**
+   * Timeout in milliseconds to dismiss notification.
+   */
+  timeout?: number
+  /**
+   * show close button, default to true when not specified.
+   */
+  close?: boolean
+  /**
+   * highlight groups for border, default to `"dialog.borderhighlight"` or 'CocFlating'
+   */
+  borderhighlight?: string
+  /**
+   * Buttons as bottom of dialog.
+   */
+  buttons?: DialogButton[]
+  /**
+   * index is -1 for window close without button click
+   */
+  callback?: (index: number) => void
+}
 
 export default class Notification {
   protected disposables: Disposable[] = []
@@ -46,7 +82,7 @@ export default class Notification {
     if (!res) return false
     if (this._disposed) {
       this.nvim.call('coc#float#close', [res[0]], true)
-      if (isVim) this.nvim.command('redraw', true)
+      this.nvim.redrawVim()
     } else {
       this._winid = res[0]
       this.bufnr = res[1]
@@ -64,7 +100,7 @@ export default class Notification {
     let { winid } = this
     if (winid) {
       this.nvim.call('coc#float#close', [winid], true)
-      if (isVim) this.nvim.command('redraw', true)
+      this.nvim.redrawVim()
     }
     this.bufnr = undefined
     this._winid = undefined

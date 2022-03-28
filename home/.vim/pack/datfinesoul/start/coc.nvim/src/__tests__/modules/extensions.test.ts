@@ -1,9 +1,9 @@
 import { Neovim } from '@chemzqm/neovim'
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 import events from '../../events'
-import extensions, { API } from '../../extensions'
-import { Extension } from '../../types'
+import extensions, { API, Extension } from '../../extensions'
 import helper from '../helper'
 import { v1 as uuidv1 } from 'uuid'
 
@@ -21,6 +21,25 @@ jest.setTimeout(30000)
 
 describe('extensions', () => {
 
+  it('should create root when not exists', async () => {
+    let root = path.join(os.tmpdir(), 'foo-bar')
+    let res = extensions.checkRoot(root)
+    expect(res).toBe(true)
+    expect(fs.existsSync(path.join(root, 'package.json'))).toBe(true)
+    let method = typeof fs['rmSync'] === 'function' ? 'rmSync' : 'rmdirSync'
+    fs[method](root, { recursive: true })
+  })
+
+  it('should remove unexpted file', async () => {
+    let root = path.join(os.tmpdir(), 'foo-bar')
+    fs.writeFileSync(root, '')
+    let res = extensions.checkRoot(root)
+    expect(res).toBe(true)
+    expect(fs.existsSync(path.join(root, 'package.json'))).toBe(true)
+    let method = typeof fs['rmSync'] === 'function' ? 'rmSync' : 'rmdirSync'
+    fs[method](root, { recursive: true })
+  })
+
   it('should load global extensions', async () => {
     let stat = extensions.getExtensionState('test')
     expect(stat).toBe('activated')
@@ -34,7 +53,7 @@ describe('extensions', () => {
   it('should load local extensions from &rtp', async () => {
     let folder = path.resolve(__dirname, '../extensions/vim/local')
     await nvim.command(`set runtimepath^=${folder}`)
-    await helper.wait(300)
+    await helper.wait(200)
     let stat = extensions.getExtensionState('local')
     expect(stat).toBe('activated')
   })
@@ -44,7 +63,6 @@ describe('extensions', () => {
     let folder = path.join(__dirname, '../extensions/coc-omni')
     let exists = fs.existsSync(folder)
     expect(exists).toBe(true)
-    await helper.wait(200)
     await extensions.uninstallExtension(['coc-omni'])
     exists = fs.existsSync(folder)
     expect(exists).toBe(false)
@@ -58,6 +76,26 @@ describe('extensions', () => {
     await extensions.uninstallExtension(['vue-snippets'])
     exists = fs.existsSync(folder)
     expect(exists).toBe(false)
+  })
+
+  it('should install/uninstall extension by url with branch', async () => {
+    await extensions.installExtensions(['https://github.com/sdras/vue-vscode-snippets@main'])
+    let folder = path.join(__dirname, '../extensions/vue-vscode-snippets')
+    let exists = fs.existsSync(folder)
+    expect(exists).toBe(true)
+    await extensions.uninstallExtension(['vue-vscode-snippets'])
+    exists = fs.existsSync(folder)
+    expect(exists).toBe(false)
+  })
+
+  it('should parse extension info', () => {
+    const installer = extensions.installer
+    const scoped = installer('@yaegassy/coc-intelephense').info
+    expect(scoped.name).toBe('@yaegassy/coc-intelephense')
+
+    const scopedVer = installer('@yaegassy/coc-intelephense@0.2.1').info
+    expect(scopedVer.name).toBe('@yaegassy/coc-intelephense')
+    expect(scopedVer.version).toBe('0.2.1')
   })
 
   it('should get all extensions', () => {
@@ -81,6 +119,7 @@ describe('extensions', () => {
 
   it('should reload extension', async () => {
     await extensions.reloadExtension('test')
+    await helper.wait(100)
     let stat = extensions.getExtensionState('test')
     expect(stat).toBe('activated')
   })
@@ -154,7 +193,8 @@ describe('extensions active events', () => {
     let ext = createExtension('onLanguage:javascript')
     expect(ext.isActive).toBe(false)
     await nvim.command('edit /tmp/a.js')
-    await helper.wait(300)
+    await nvim.command('setf javascript')
+    await helper.wait(100)
     expect(ext.isActive).toBe(true)
     ext = createExtension('onLanguage:javascript')
     expect(ext.isActive).toBe(true)

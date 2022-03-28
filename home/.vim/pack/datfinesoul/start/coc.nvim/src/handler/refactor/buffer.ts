@@ -74,7 +74,7 @@ export default class RefactorBuffer implements BufferSyncItem {
   private matchIds: Set<number> = new Set()
   private changing = false
   constructor(
-    private bufnr: number,
+    public readonly bufnr: number,
     private srcId: number,
     private nvim: Neovim,
     public readonly config: RefactorConfig,
@@ -186,17 +186,13 @@ export default class RefactorBuffer implements BufferSyncItem {
         if (!newLines.length) {
           // remove this range
           fileItem.ranges.splice(i, 1)
-          edits.push({
-            range: this.getFileRangeRange(r, false),
-            newText: ''
-          })
+          let range = this.getFileRangeRange(r, false)
+          if (range) edits.push({ range, newText: '' })
         } else {
           r.end = r.start + newLines.length
           // reload lines, reset end
-          edits.push({
-            range: this.getFileRangeRange(r, true),
-            newText: newLines.join('\n') + '\n'
-          })
+          let range = this.getFileRangeRange(r, true)
+          if (range) edits.push({ range, newText: newLines.join('\n') + '\n' })
         }
       }
     }
@@ -297,7 +293,7 @@ export default class RefactorBuffer implements BufferSyncItem {
     let { document } = this
     const release = await this.mutex.acquire()
     try {
-      if (document.dirty) document.forceSync()
+      await document.synchronize()
       for (let item of items) {
         let fileItem = this._fileItems.find(o => o.filepath == item.filepath)
         if (fileItem) {
@@ -339,12 +335,9 @@ export default class RefactorBuffer implements BufferSyncItem {
       buffer.setOption('undolevels', 1000, true)
       if (count == 2 && hlRanges.length) {
         let pos = hlRanges[0].start
-        nvim.call('coc#util#jumpTo', [pos.line, pos.character], true)
+        nvim.call('coc#cursor#move_to', [pos.line, pos.character], true)
       }
-      if (workspace.isVim) {
-        nvim.command('redraw', true)
-      }
-      let [, err] = await nvim.resumeNotification()
+      let [, err] = await nvim.resumeNotification(true)
       if (err) throw new Error(err[2])
       await document.patchChange()
       this.changing = false
@@ -434,7 +427,6 @@ export default class RefactorBuffer implements BufferSyncItem {
         }
       }
     }
-    return null
   }
 
   private getLinesRange(lnum: number): [number, number] | null {
@@ -445,7 +437,6 @@ export default class RefactorBuffer implements BufferSyncItem {
         }
       }
     }
-    return null
   }
 
   private async getLines(fsPath: string, start: number, end: number): Promise<string[]> {

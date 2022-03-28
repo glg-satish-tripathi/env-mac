@@ -5,7 +5,6 @@ import { EventEmitter } from 'events'
 import path from 'path'
 import readline from 'readline'
 import { Range } from 'vscode-languageserver-types'
-import which from 'which'
 import Highlighter from '../model/highligher'
 import { ansiparse } from '../util/ansiparse'
 import window from '../window'
@@ -110,13 +109,9 @@ export default class Search {
     let { nvim, cmd } = this
     let { afterContext, beforeContext } = refactorBuf.config
     let argList = ['-A', afterContext.toString(), '-B', beforeContext.toString()].concat(defaultArgs, args)
-    argList.push('--', './')
-    try {
-      cmd = which.sync(cmd)
-    } catch (e) {
-      window.showMessage(`Please install ripgrep and make sure ${this.cmd} is in your $PATH`, 'error')
-      return Promise.reject(e)
-    }
+    let p = getPathFromArgs(args)
+    if (p) argList.pop()
+    argList.push('--', p ? path.isAbsolute(p) ? p : `./${p.replace(/^\.\//, '')}` : './')
     this.task = new Task()
     this.task.start(cmd, argList, cwd)
     let mutex: Mutex = new Mutex()
@@ -138,7 +133,7 @@ export default class Search {
       release()
     }
     return new Promise((resolve, reject) => {
-      let interval = setInterval(addFileItems, 100)
+      let interval = setInterval(addFileItems, 300)
       this.task.on('item', async (fileItem: FileItem) => {
         files++
         matches = matches + fileItem.ranges.reduce((p, r) => p + r.highlights.length, 0)
@@ -190,4 +185,17 @@ export default class Search {
       })
     })
   }
+
+  public abort(): void {
+    this.task?.dispose()
+  }
+}
+
+// rg requires `-- [path]` at the end
+export function getPathFromArgs(args: string[]): string | undefined {
+  if (args.length < 2) return undefined
+  let len = args.length
+  if (args[len - 1].startsWith('-')) return undefined
+  if (args[len - 2].startsWith('-')) return undefined
+  return args[len - 1]
 }

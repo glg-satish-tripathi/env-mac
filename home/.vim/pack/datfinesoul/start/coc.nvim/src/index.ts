@@ -1,28 +1,27 @@
 import commands from './commands'
 import events from './events'
 import languages from './languages'
-import Document from './model/document'
 import Mru from './model/mru'
 import FloatFactory from './model/floatFactory'
 import fetch from './model/fetch'
 import download from './model/download'
 import Highligher from './model/highligher'
-import FileSystemWatcher from './model/fileSystemWatcher'
+import RelativePattern from './model/relativePattern'
 import services from './services'
-import sources from './sources'
+import sources from './sources/index'
 import workspace from './workspace'
 import window from './window'
 import extensions from './extensions'
 import listManager from './list/manager'
 import snippetManager from './snippets/manager'
-import BasicList from './list/basic'
+import { SnippetString } from './snippets/string'
 import diagnosticManager from './diagnostic/manager'
 import { ansiparse } from './util/ansiparse'
-import Watchman from './watchman'
+import BasicList from './list/basic'
 import { Mutex } from './util/mutex'
 import { URI } from 'vscode-uri'
-import { Neovim, Buffer, Window } from '@chemzqm/neovim'
 import {
+  CodeActionKind,
   Disposable,
   Position,
   Range,
@@ -41,13 +40,108 @@ import {
   InsertTextFormat,
   Location,
   LocationLink,
+  MarkupKind,
+  FileChangeType,
+  SignatureHelpTriggerKind,
+  SymbolKind,
+  DocumentHighlightKind,
+  CompletionTriggerKind,
+  DiagnosticTag,
+  ProgressType,
 } from 'vscode-languageserver-protocol'
-import { ProgressType } from 'vscode-jsonrpc'
 
-export * from './types'
-export * from './language-client'
-export * from './provider'
+import { PatternType, SourceType, MessageLevel, ConfigurationTarget, ServiceStat, FileType } from './types'
+import {
+  State,
+  NullLogger,
+  ClientState,
+  CloseAction,
+  ErrorAction,
+  TransportKind,
+  SettingMonitor,
+  LanguageClient,
+  MessageTransports,
+  RevealOutputChannelOn,
+} from './language-client'
 
-export { Neovim, Diagnostic, DiagnosticSeverity, CompletionItemKind, InsertTextFormat, Location, LocationLink, CancellationTokenSource, CancellationToken, ProgressType, Position, Range, TextEdit, RequestType, RequestType0, NotificationType, NotificationType0, Buffer, Window, Highligher, Mru, Watchman, URI as Uri, Disposable, Event, Emitter, FloatFactory, fetch, download, ansiparse }
-export { workspace, window, snippetManager, events, services, commands, sources, languages, diagnosticManager, Document, FileSystemWatcher, extensions, listManager, BasicList, Mutex }
-export { disposeAll, concurrent, watchFile, wait, runCommand, isRunning, executable } from './util'
+import { disposeAll, concurrent, watchFile, wait, runCommand, isRunning, executable } from './util'
+import { TreeItem, TreeItemCollapsibleState } from './tree/index'
+import { SemanticTokensBuilder } from './model/semanticTokensBuilder'
+
+module.exports = {
+  Uri: URI,
+  NullLogger,
+  SettingMonitor,
+  LanguageClient,
+  CancellationTokenSource,
+  ProgressType,
+  RequestType,
+  RequestType0,
+  NotificationType,
+  NotificationType0,
+  Highligher,
+  Mru,
+  Emitter,
+  SnippetString,
+  BasicList,
+  Mutex,
+  TreeItem,
+  SemanticTokensBuilder,
+  FloatFactory,
+  RelativePattern,
+  PatternType,
+  SourceType,
+  MessageLevel,
+  ConfigurationTarget,
+  ServiceStat,
+  FileType,
+  State,
+  ClientState,
+  CloseAction,
+  ErrorAction,
+  TransportKind,
+  MessageTransports,
+  RevealOutputChannelOn,
+  MarkupKind,
+  DiagnosticTag,
+  DocumentHighlightKind,
+  SymbolKind,
+  SignatureHelpTriggerKind,
+  FileChangeType,
+  CodeActionKind,
+  Diagnostic,
+  DiagnosticSeverity,
+  CompletionItemKind,
+  InsertTextFormat,
+  Location,
+  LocationLink,
+  CancellationToken,
+  Position,
+  Range,
+  TextEdit,
+  Disposable,
+  Event,
+  workspace,
+  window,
+  CompletionTriggerKind,
+  snippetManager,
+  events,
+  services,
+  commands,
+  sources,
+  languages,
+  diagnosticManager,
+  extensions,
+  listManager,
+  TreeItemCollapsibleState,
+  fetch,
+  download,
+  ansiparse,
+  disposeAll,
+  concurrent,
+  watchFile,
+  wait,
+  runCommand,
+  isRunning,
+  executable,
+}

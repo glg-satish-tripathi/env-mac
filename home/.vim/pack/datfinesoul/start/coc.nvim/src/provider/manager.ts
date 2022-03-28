@@ -1,7 +1,7 @@
 import { Definition, DocumentSelector, Location, LocationLink } from 'vscode-languageserver-protocol'
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import workspace from '../workspace'
-import window from '../window'
+import { equals } from '../util/object'
 const logger = require('../util/logger')('provider-manager')
 
 export interface ProviderItem<T> {
@@ -35,7 +35,7 @@ export default class Manager<T> {
     return providerItem
   }
 
-  protected poviderById(id): T {
+  protected getProviderById(id: string): T {
     let item = Array.from(this.providers).find(o => o.id == id)
     return item ? item.provider : null
   }
@@ -46,36 +46,34 @@ export default class Manager<T> {
     return items.sort((a, b) => workspace.match(b.selector, document) - workspace.match(a.selector, document))
   }
 
-  protected mergeDefinitions(arr: (Definition | LocationLink[])[]): Location[] {
+  protected toLocations(arr: (Definition | LocationLink[] | null)[]): Location[] {
     let res: Location[] = []
     for (let def of arr) {
       if (!def) continue
       if (Location.is(def)) {
-        let { uri, range } = def
-        let idx = res.findIndex(l => l.uri == uri && l.range.start.line == range.start.line)
-        if (idx == -1) {
-          res.push(def)
-        }
+        addLocation(res, def)
       } else if (Array.isArray(def)) {
         for (let d of def) {
           if (Location.is(d)) {
-            let { uri, range } = d
-            let idx = res.findIndex(l => l.uri == uri && l.range.start.line == range.start.line)
-            if (idx == -1) {
-              res.push(d)
-            }
+            addLocation(res, d)
           } else if (LocationLink.is(d)) {
-            let { targetUri, targetSelectionRange } = d
-            let idx = res.findIndex(l => l.uri === targetUri && l.range.start.line === targetSelectionRange.start.line)
-            if (idx === -1) {
-              res.push(Location.create(targetUri, targetSelectionRange))
-            }
+            let { targetUri, targetSelectionRange, targetRange } = d
+            addLocation(res, Location.create(targetUri, targetSelectionRange || targetRange))
           }
         }
       } else {
-        window.showMessage(`Bad definition ${JSON.stringify(def)}`, 'error')
+        logger.error(`Bad definition`, def)
       }
     }
     return res
   }
+}
+
+/**
+ * Add unique location
+ */
+function addLocation(arr: Location[], location: Location): void {
+  let { range, uri } = location
+  if (arr.find(o => o.uri == uri && equals(o.range, range)) != null) return
+  arr.push(location)
 }

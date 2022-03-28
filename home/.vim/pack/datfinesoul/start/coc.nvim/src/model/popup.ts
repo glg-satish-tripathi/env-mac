@@ -26,14 +26,7 @@ export default class Popup {
   }
 
   public execute(cmd: string): void {
-    this.nvim.call('coc#float#execute', [this.winid, cmd], true)
-  }
-
-  public click(lnum: number, col: number): void {
-    let { nvim } = this
-    nvim.call('win_gotoid', [this.winid], true)
-    nvim.call('cursor', [lnum, col], true)
-    nvim.call('coc#float#nvim_float_click', [], true)
+    this.nvim.call('coc#compat#execute', [this.winid, cmd], true)
   }
 
   /**
@@ -54,11 +47,11 @@ export default class Popup {
     if (botline >= total || botline == 0) return
     nvim.pauseNotification()
     this.setCursor(botline - 1)
+    this.execute(`silent! noa setl scrolloff=0`)
     this.execute(`normal! ${botline}Gzt`)
     this.refreshScrollbar()
     nvim.command('redraw', true)
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    nvim.resumeNotification(false, true)
+    void nvim.resumeNotification(false, true)
   }
 
   /**
@@ -80,8 +73,7 @@ export default class Popup {
     this.execute(`normal! ${topline}Gzb`)
     this.refreshScrollbar()
     nvim.command('redraw', true)
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    nvim.resumeNotification(false, true)
+    void nvim.resumeNotification(false, true)
   }
 
   /**

@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-# shellcheck disable=SC1090
-source "$(dirname "$(readlink -e -- "$0")")/core.source"
-
-# https://github.com/wagoodman/docker-compose
-sudo curl -L "https://github.com/docker/compose/releases/download/1.26.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose

@@ -1,14 +1,14 @@
 import { Neovim } from '@chemzqm/neovim'
 import * as language from 'vscode-languageserver-protocol'
-import { CodeAction, Disposable, Location, Position, Range, TextDocumentEdit, TextEdit, WorkspaceEdit } from 'vscode-languageserver-protocol'
+import { CodeAction, Disposable, InsertTextMode, Location, Position, Range, TextDocumentEdit, TextEdit, WorkspaceEdit } from 'vscode-languageserver-protocol'
 import { URI } from 'vscode-uri'
 import diagnosticManager from './diagnostic/manager'
 import Mru from './model/mru'
 import Plugin from './plugin'
 import snipetsManager from './snippets/manager'
 import { wait } from './util'
-import workspace from './workspace'
 import window from './window'
+import workspace from './workspace'
 const logger = require('./util/logger')('commands')
 
 // command center
@@ -40,6 +40,7 @@ class CommandItem implements Disposable, Command {
 export class CommandManager implements Disposable {
   private readonly commands = new Map<string, CommandItem>()
   public titles = new Map<string, string>()
+  public onCommandList: string[] = []
   private mru: Mru
 
   public init(nvim: Neovim, plugin: Plugin): void {
@@ -53,14 +54,14 @@ export class CommandManager implements Disposable {
     this.register({
       id: 'workbench.action.reloadWindow',
       execute: async () => {
-        await nvim.command('edit')
+        nvim.command('CocRestart', true)
       }
     }, true)
     this.register({
       id: 'editor.action.insertSnippet',
-      execute: async (edit: TextEdit) => {
-        nvim.call('coc#_cancel', [], true)
-        return await snipetsManager.insertSnippet(edit.newText, true, edit.range)
+      execute: async (edit: TextEdit, ultisnip = false) => {
+        await nvim.call('coc#_cancel', [])
+        return await snipetsManager.insertSnippet(edit.newText, true, edit.range, InsertTextMode.adjustIndentation, ultisnip)
       }
     }, true)
     this.register({
@@ -116,13 +117,12 @@ export class CommandManager implements Disposable {
       }
     }, true)
     this.register({
-      id: 'workspace.diffDocument',
-      execute: async () => {
-        let document = await workspace.document
-        if (!document) return
-        await nvim.call('coc#util#diff_content', [document.getLines()])
+      id: 'workspace.refactor',
+      execute: async (locations: Location[]) => {
+        let locs = locations.filter(o => Location.is(o))
+        await plugin.getHandler().refactor.fromLocations(locs)
       }
-    })
+    }, true)
     this.register({
       id: 'workspace.clearWatchman',
       execute: async () => {
@@ -181,6 +181,18 @@ export class CommandManager implements Disposable {
         }
       }
     }, false, 'open output buffer to show output from languageservers or extensions.')
+    this.register({
+      id: 'document.showIncomingCalls',
+      execute: async () => {
+        await plugin.cocAction('showIncomingCalls')
+      }
+    }, false, 'show incoming calls in tree view.')
+    this.register({
+      id: 'document.showOutgoingCalls',
+      execute: async () => {
+        await plugin.cocAction('showOutgoingCalls')
+      }
+    }, false, 'show outgoing calls in tree view.')
     this.register({
       id: 'document.echoFiletype',
       execute: async () => {
@@ -243,6 +255,13 @@ export class CommandManager implements Disposable {
       }
     }, false, 'Jump to next symbol highlight position.')
     this.register({
+      id: 'workspace.openLocation',
+      execute: async (winid: number, loc: Location, openCommand?: string) => {
+        if (winid) await nvim.call('win_gotoid', [winid])
+        await workspace.jumpTo(loc.uri, loc.range.start, openCommand)
+      }
+    }, true)
+    this.register({
       id: 'document.jumpToPrevSymbol',
       execute: async () => {
         let doc = await workspace.document
@@ -283,11 +302,11 @@ export class CommandManager implements Disposable {
     this.commands.clear()
   }
 
-  public execute(command: language.Command): void {
+  public execute(command: language.Command): Promise<any> {
     let args = [command.command]
     let arr = command.arguments
     if (arr) args.push(...arr)
-    this.executeCommand.apply(this, args)
+    return this.executeCommand.apply(this, args)
   }
 
   public register<T extends Command>(command: T, internal = false, description?: string): T {
@@ -343,16 +362,10 @@ export class CommandManager implements Disposable {
    * @return A promise that resolves to the returned value of the given command. `undefined` when
    * the command handler function doesn't return anything.
    */
-  public executeCommand(command: string, ...rest: any[]): Promise<any> {
+  public executeCommand<T>(command: string, ...rest: any[]): Promise<T> {
     let cmd = this.commands.get(command)
-    if (!cmd) {
-      window.showMessage(`Command: ${command} not found`, 'error')
-      return
-    }
-    return Promise.resolve(cmd.execute.apply(cmd, rest)).catch(e => {
-      window.showMessage(`Command error: ${e.message}`, 'error')
-      logger.error(e.stack)
-    })
+    if (!cmd) throw new Error(`Command: ${command} not found`)
+    return Promise.resolve(cmd.execute.apply(cmd, rest))
   }
 
   public async addRecent(cmd: string): Promise<void> {

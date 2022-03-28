@@ -1,13 +1,16 @@
 /* eslint-disable */
-/*---------------------------------------------------------------------------------------------
- *  Copyright (c) Microsoft Corporation. All rights reserved.
- *  Licensed under the MIT License. See License.txt in the project root for license information.
- *--------------------------------------------------------------------------------------------*/
 import * as assert from 'assert'
-import { Scanner, TokenType, SnippetParser, Text, Placeholder, Variable, Marker, TextmateSnippet, Choice, FormatString, Transform } from '../../snippets/parser'
+import { Scanner, transformEscapes, TokenType, SnippetParser, Text, Placeholder, Variable, Marker, TextmateSnippet, Choice, FormatString, Transform } from '../../snippets/parser'
 import { Range } from 'vscode-languageserver-types'
 
 describe('SnippetParser', () => {
+
+  test('transformEscapes', () => {
+    assert.equal(transformEscapes('b\\uabc\\LDef'), 'bAbcdef')
+    assert.equal(transformEscapes('b\\Uabc\\Edef'), 'bABCdef')
+    assert.equal(transformEscapes('b\\LABC\\Edef'), 'babcdef')
+    assert.equal(transformEscapes(' \\n \\t'), ' \n \t')
+  })
 
   test('Scanner', () => {
 
@@ -28,6 +31,8 @@ describe('SnippetParser', () => {
 
     scanner.text('abc() ')
     assert.equal(scanner.next().type, TokenType.VariableName)
+    assert.equal(scanner.next().type, TokenType.OpenParen)
+    assert.equal(scanner.next().type, TokenType.CloseParen)
     assert.equal(scanner.next().type, TokenType.Format)
     assert.equal(scanner.next().type, TokenType.EOF)
 
@@ -238,6 +243,58 @@ describe('SnippetParser', () => {
     assertMarker('${foo/.*/complex${1:?if:else}/i}', Variable)
     assertMarker('${foo/.*/complex${1:/upcase}/i}', Variable)
 
+  })
+
+  test('Parser, transform condition if text', () => {
+    const p = new SnippetParser(true)
+    let snip = p.parse('begin|${1:t}${1/(t)$|(a)$|(.*)/(?1:abular)(?2:rray)/}')
+    expect(snip.toString()).toBe('begin|tabular')
+    snip.updatePlaceholder(1, 'a')
+    expect(snip.toString()).toBe('begin|array')
+  })
+
+  test('Parser, transform condition not match', () => {
+    const p = new SnippetParser(true)
+    let snip = p.parse('${1:xyz} ${1/^(f)(b?)/(?2:_:two)/}')
+    expect(snip.toString()).toBe('xyz xyz')
+  })
+
+  test('Parser, transform backslash in condition', () => {
+    const p = new SnippetParser(true)
+    let snip = p.parse('${1:foo} ${1/^(f)/(?1:x\\)\\:a:two)/}')
+    expect(snip.toString()).toBe('foo x):aoo')
+  })
+
+  test('Parser, transform backslash in format string', () => {
+    const p = new SnippetParser(true)
+    let snip = p.parse('${1:\\n} ${1/^(\\\\n)/$1aa/}')
+    expect(snip.toString()).toBe('\\n \\naa')
+  })
+
+  test('Parser, transform condition else text', () => {
+    const p = new SnippetParser(true)
+    let snip = p.parse('${1:foo} ${1/^(f)(b?)/(?2:_:two)/}')
+    expect(snip.toString()).toBe('foo twooo')
+    snip.updatePlaceholder(1, 'fb')
+    expect(snip.toString()).toBe('fb _')
+  })
+
+  test('Parser, transform escape sequence', () => {
+    const p = new SnippetParser(true)
+    const snip = p.parse('${1:a text}\n${1/\\w+\\s*/\\u$0/}')
+    expect(snip.toString()).toBe('a text\nA text')
+  })
+
+  test('Parser, transform backslash', () => {
+    const p = new SnippetParser(true)
+    const snip = p.parse('${1:a}\n${1/\\w+/\\(\\)\\:\\x\\\\y/}')
+    expect(snip.toString()).toBe('a\n():\\x\\\\y')
+  })
+
+  test('Parser, transform with ascii option', () => {
+    const p = new SnippetParser()
+    const snip = p.parse('${1:pêche}\n${1/.*/$0/a}')
+    expect(snip.toString()).toBe('pêche\npeche')
   })
 
   test('Parser, placeholder with transform', () => {

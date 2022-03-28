@@ -1,19 +1,19 @@
 import { Neovim } from '@chemzqm/neovim'
-import { CancellationToken } from 'vscode-jsonrpc'
+import events from '../events'
 import { parseDocuments } from '../markdown'
-import { Documentation, PumBounding } from '../types'
+import { FloatConfig, Documentation } from '../types'
 const logger = require('../util/logger')('floating')
 
-interface Bounding {
-  row: number
-  col: number
-  width: number
-  height: number
-  relative: string
+export interface PumBounding {
+  readonly height: number
+  readonly width: number
+  readonly row: number
+  readonly col: number
+  readonly scrollbar: boolean
 }
 
-export interface FloatingConfig {
-  maxPreviewWidth: number
+export interface FloatingConfig extends FloatConfig {
+  excludeImages: boolean
 }
 
 export default class Floating {
@@ -25,27 +25,35 @@ export default class Floating {
     private isVim: boolean) {
   }
 
-  public async show(docs: Documentation[], bounding: PumBounding, config: FloatingConfig, token: CancellationToken): Promise<void> {
+  public async show(docs: Documentation[], bounding: PumBounding, config: FloatingConfig): Promise<void> {
     let { nvim } = this
     docs = docs.filter(o => o.content.trim().length > 0)
-    let { lines, codes, highlights } = parseDocuments(docs)
+    let { lines, codes, highlights } = parseDocuments(docs, { excludeImages: config.excludeImages })
     if (lines.length == 0) {
       this.close()
       return
     }
-    let res = await nvim.call('coc#float#create_pum_float', [this.winid, this.bufnr, lines, {
+    let opts: any = {
       codes,
       highlights,
-      maxWidth: config.maxPreviewWidth,
+      maxWidth: config.maxWidth || 80,
       pumbounding: bounding,
-    }])
-    if (this.isVim) nvim.command('redraw', true)
+    }
+    if (config.border) opts.border = [1, 1, 1, 1]
+    if (config.highlight) opts.highlight = config.highlight
+    if (config.borderhighlight) opts.borderhighlight = config.borderhighlight
+    if (!this.isVim) {
+      if (typeof config.winblend === 'number') opts.winblend = config.winblend
+      opts.focusable = config.focusable === true ? 1 : 0
+      if (config.shadow) opts.shadow = 1
+    }
+    let res = await nvim.call('coc#float#create_pum_float', [this.winid, this.bufnr, lines, opts])
+    nvim.redrawVim()
     if (!res || res.length == 0) return
     this.winid = res[0]
     this.bufnr = res[1]
-    if (token.isCancellationRequested) {
+    if (!events.pumvisible) {
       this.close()
-      return
     }
   }
 
@@ -54,6 +62,6 @@ export default class Floating {
     this.winid = 0
     if (!winid) return
     nvim.call('coc#float#close', [winid], true)
-    if (this.isVim) nvim.command('redraw', true)
+    nvim.redrawVim()
   }
 }

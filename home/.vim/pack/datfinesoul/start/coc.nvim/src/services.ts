@@ -2,10 +2,10 @@ import { SpawnOptions } from 'child_process'
 import { EventEmitter } from 'events'
 import fs from 'fs'
 import net from 'net'
-import { CancellationToken, CancellationTokenSource, Disposable, DocumentSelector, Emitter } from 'vscode-languageserver-protocol'
+import { CancellationToken, Event, CancellationTokenSource, Disposable, DocumentSelector, Emitter } from 'vscode-languageserver-protocol'
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import { Executable, ForkOptions, LanguageClient, LanguageClientOptions, RevealOutputChannelOn, ServerOptions, State, Transport, TransportKind } from './language-client'
-import { IServiceProvider, LanguageServerConfig, ServiceStat } from './types'
+import { ServiceStat } from './types'
 import { disposeAll, wait } from './util'
 import workspace from './workspace'
 import window from './window'
@@ -15,6 +15,37 @@ interface ServiceInfo {
   id: string
   state: string
   languageIds: string[]
+}
+
+export interface LanguageServerConfig {
+  module?: string
+  command?: string
+  transport?: string
+  transportPort?: number
+  disableSnippetCompletion?: boolean
+  disableDynamicRegister?: boolean
+  disabledFeatures?: string[]
+  formatterPriority?: number
+  filetypes: string[]
+  additionalSchemes?: string[]
+  enable?: boolean
+  args?: string[]
+  cwd?: string
+  env?: any
+  // socket port
+  port?: number
+  host?: string
+  detached?: boolean
+  shell?: boolean
+  execArgv?: string[]
+  rootPatterns?: string[]
+  ignoredRootPaths?: string[]
+  initializationOptions?: any
+  progressOnInitialization?: boolean
+  revealOutputChannelOn?: string
+  configSection?: string
+  stdioEncoding?: string
+  runtime?: string
 }
 
 export function getStateName(state: ServiceStat): string {
@@ -34,6 +65,21 @@ export function getStateName(state: ServiceStat): string {
     default:
       return 'unknown'
   }
+}
+
+export interface IServiceProvider {
+  // unique service id
+  id: string
+  name: string
+  client?: LanguageClient
+  selector: DocumentSelector
+  // current state
+  state: ServiceStat
+  start(): Promise<void>
+  dispose(): void
+  stop(): Promise<void> | void
+  restart(): Promise<void> | void
+  onServiceReady: Event<void>
 }
 
 export class ServiceManager extends EventEmitter implements Disposable {
@@ -176,8 +222,38 @@ export class ServiceManager extends EventEmitter implements Disposable {
     let lspConfig = workspace.getConfiguration().get<{ key: LanguageServerConfig }>('languageserver', {} as any)
     for (let key of Object.keys(lspConfig)) {
       let config: LanguageServerConfig = lspConfig[key]
+      if (!this.validServerConfig(key, config)) {
+        continue
+      }
       this.registLanguageClient(key, config)
     }
+  }
+
+  private validServerConfig(key: string, config: LanguageServerConfig): boolean {
+    let errors: string[] = []
+    if (config.module != null && typeof config.module !== 'string') {
+      errors.push(`"module" field of languageserver ${key} should be string`)
+    }
+    if (config.command != null && typeof config.command !== 'string') {
+      errors.push(`"command" field of languageserver ${key} should be string`)
+    }
+    if (config.transport != null && typeof config.transport !== 'string') {
+      errors.push(`"transport" field of languageserver ${key} should be string`)
+    }
+    if (config.transportPort != null && typeof config.transportPort !== 'number') {
+      errors.push(`"transportPort" field of languageserver ${key} should be string`)
+    }
+    if (!Array.isArray(config.filetypes) || !config.filetypes.every(s => typeof s === 'string')) {
+      errors.push(`"filetypes" field of languageserver ${key} should be array of string`)
+    }
+    if (config.additionalSchemes && (!Array.isArray(config.additionalSchemes) || config.additionalSchemes.some(s => typeof s !== 'string'))) {
+      errors.push(`"additionalSchemes" field of languageserver ${key} should be array of string`)
+    }
+    if (errors.length) {
+      window.showMessage(errors.join('\n'), 'error')
+      return false
+    }
+    return true
   }
 
   private waitClient(id: string): Promise<void> {
@@ -349,7 +425,7 @@ export function documentSelectorToLanguageIds(documentSelector: DocumentSelector
 }
 
 // convert config to options
-export function getLanguageServerOptions(id: string, name: string, config: LanguageServerConfig): [LanguageClientOptions, ServerOptions] {
+export function getLanguageServerOptions(id: string, name: string, config: Readonly<LanguageServerConfig>): [LanguageClientOptions, ServerOptions] {
   let { command, module, port, args, filetypes } = config
   args = args || []
   if (!filetypes) {
@@ -396,16 +472,21 @@ export function getLanguageServerOptions(id: string, name: string, config: Langu
       })
     })
   }
-  let disableWorkspaceFolders = !!config.disableWorkspaceFolders
+  // compatiable
+  let disabledFeatures: string[] = Array.from(config.disabledFeatures || [])
+  for (let key of ['disableWorkspaceFolders', 'disableCompletion', 'disableDiagnostics']) {
+    if (config[key] === true) {
+      let s = key.slice(7)
+      disabledFeatures.push(s[0].toLowerCase() + s.slice(1))
+    }
+  }
   let disableSnippetCompletion = !!config.disableSnippetCompletion
   let ignoredRootPaths = config.ignoredRootPaths || []
   let clientOptions: LanguageClientOptions = {
     ignoredRootPaths: ignoredRootPaths.map(s => workspace.expand(s)),
-    disableWorkspaceFolders,
     disableSnippetCompletion,
     disableDynamicRegister: !!config.disableDynamicRegister,
-    disableCompletion: !!config.disableCompletion,
-    disableDiagnostics: !!config.disableDiagnostics,
+    disabledFeatures,
     formatterPriority: config.formatterPriority || 0,
     documentSelector: getDocumentSelector(config.filetypes, config.additionalSchemes),
     revealOutputChannelOn: getRevealOutputChannelOn(config.revealOutputChannelOn),

@@ -5,7 +5,7 @@ import readline from 'readline'
 import { CancellationToken, Disposable, Location, Position, Range } from 'vscode-languageserver-protocol'
 import { URI } from 'vscode-uri'
 import { ProviderResult } from '../provider'
-import { IList, ListAction, ListArgument, ListContext, ListItem, ListTask, LocationWithLine, PreiewOptions, WorkspaceConfiguration } from '../types'
+import { IList, ListAction, ListArgument, ListContext, ListItem, ListTask, LocationWithLine, WorkspaceConfiguration } from '../types'
 import { disposeAll } from '../util'
 import { readFile } from '../util/fs'
 import { comparePosition, emptyRange } from '../util/position'
@@ -18,6 +18,7 @@ interface ActionOptions {
   persist?: boolean
   reload?: boolean
   parallel?: boolean
+  tabPersist?: boolean
 }
 
 interface ArgumentItem {
@@ -36,6 +37,17 @@ interface PreviewConfig {
   filetype?: string
   range?: Range
   scheme?: string
+  toplineStyle: string
+  toplineOffset: number
+}
+
+export interface PreviewOptions {
+  bufname?: string
+  filetype: string
+  lines: string[]
+  lnum?: number
+  range?: Range
+  sketch?: boolean
 }
 
 export default abstract class BasicList implements IList, Disposable {
@@ -67,6 +79,14 @@ export default abstract class BasicList implements IList, Disposable {
     return this.config.get('previewSplitRight', false)
   }
 
+  protected get toplineStyle(): string {
+    return this.config.get('previewToplineStyle', 'offset')
+  }
+
+  protected get toplineOffset(): number {
+    return this.config.get('previewToplineOffset', 3)
+  }
+
   public parseArguments(args: string[]): { [key: string]: string | boolean } {
     if (!this.optionMap) {
       this.optionMap = new Map()
@@ -82,10 +102,7 @@ export default abstract class BasicList implements IList, Disposable {
     for (let i = 0; i < args.length; i++) {
       let arg = args[i]
       let def = this.optionMap.get(arg)
-      if (!def) {
-        logger.error(`Option "${arg}" of "${this.name}" not found`)
-        continue
-      }
+      if (!def) continue
       let value: string | boolean = true
       if (def.hasValue) {
         value = args[i + 1] || ''
@@ -144,9 +161,10 @@ export default abstract class BasicList implements IList, Disposable {
     for (let name of ['open', 'tabe', 'drop', 'vsplit', 'split']) {
       this.createAction({
         name,
-        execute: async (item: ListItem) => {
-          await this.jumpTo(item.location, name == 'open' ? null : name)
-        }
+        execute: async (item: ListItem, context: ListContext) => {
+          await this.jumpTo(item.location, name == 'open' ? null : name, context)
+        },
+        tabPersist: name === 'open'
       })
     }
   }
@@ -188,7 +206,10 @@ export default abstract class BasicList implements IList, Disposable {
     return Location.create(location.uri, Range.create(0, 0, 0, 0))
   }
 
-  public async jumpTo(location: Location | LocationWithLine | string, command?: string): Promise<void> {
+  public async jumpTo(location: Location | LocationWithLine | string, command?: string, context?: ListContext): Promise<void> {
+    if (command == null && context && context.options.position === 'tab') {
+      command = 'tabe'
+    }
     if (typeof location == 'string') {
       await workspace.jumpTo(location, null, command)
       return
@@ -202,7 +223,7 @@ export default abstract class BasicList implements IList, Disposable {
     await workspace.jumpTo(uri, position, command)
   }
 
-  private createAction(action: ListAction): void {
+  public createAction(action: ListAction): void {
     let { name } = action
     let idx = this.actions.findIndex(o => o.name == name)
     // allow override
@@ -232,18 +253,20 @@ export default abstract class BasicList implements IList, Disposable {
       range: emptyRange(range) ? null : range,
       lnum: range.start.line + 1,
       name: u.scheme == 'file' ? u.fsPath : uri,
-      filetype: doc ? doc.filetype : this.getFiletype(u.fsPath),
+      filetype: toVimFiletype(doc ? doc.languageId : this.getLanguageId(u.fsPath)),
       position: context.options.position,
       maxHeight: this.previewHeight,
       splitRight: this.splitRight,
       hlGroup: this.hlGroup,
       scheme: u.scheme,
+      toplineStyle: this.toplineStyle,
+      toplineOffset: this.toplineOffset,
     }
     await nvim.call('coc#list#preview', [lines, config])
-    if (workspace.isVim) nvim.command('redraw', true)
+    nvim.command('redraw', true)
   }
 
-  public async preview(options: PreiewOptions, context: ListContext): Promise<void> {
+  public async preview(options: PreviewOptions, context: ListContext): Promise<void> {
     let { nvim } = this
     let { bufname, filetype, range, lines, lnum } = options
     let config: PreviewConfig = {
@@ -254,11 +277,13 @@ export default abstract class BasicList implements IList, Disposable {
       maxHeight: this.previewHeight,
       splitRight: this.splitRight,
       hlGroup: this.hlGroup,
+      toplineStyle: this.toplineStyle,
+      toplineOffset: this.toplineOffset,
     }
     if (bufname) config.name = bufname
     if (range) config.range = range
     await nvim.call('coc#list#preview', [lines, config])
-    if (workspace.isVim) nvim.command('redraw', true)
+    nvim.command('redraw', true)
   }
 
   public abstract loadItems(context: ListContext, token?: CancellationToken): Promise<ListItem[] | ListTask | null | undefined>
@@ -274,20 +299,25 @@ export default abstract class BasicList implements IList, Disposable {
   /**
    * Get filetype by check same extension name buffer.
    */
-  private getFiletype(filepath: string): string {
+  private getLanguageId(filepath: string): string {
     let extname = path.extname(filepath)
     if (!extname) return ''
     for (let doc of workspace.documents) {
       let fsPath = URI.parse(doc.uri).fsPath
       if (path.extname(fsPath) == extname) {
-        let { filetype } = doc
-        // react syntax could be slow
-        if (filetype == 'javascriptreact') return 'javascript'
-        if (filetype == 'typescriptreact') return 'typescript'
-        if (filetype.indexOf('.') !== -1) return filetype.split('.')[0]
-        return filetype
+        return doc.languageId
       }
     }
     return ''
+  }
+}
+
+export function toVimFiletype(filetype: string): string {
+  switch (filetype) {
+    case 'latex':
+      // LaTeX (LSP language ID 'latex') has Vim filetype 'tex'
+      return 'tex'
+    default:
+      return filetype
   }
 }

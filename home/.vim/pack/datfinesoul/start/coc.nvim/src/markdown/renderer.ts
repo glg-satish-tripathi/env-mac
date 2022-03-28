@@ -10,18 +10,24 @@ let TABLE_ROW_WRAP_REGEXP = new RegExp(escapeRegExp(TABLE_ROW_WRAP), 'g')
 let COLON_REPLACER = '*#COLON|*'
 let COLON_REPLACER_REGEXP = new RegExp(escapeRegExp(COLON_REPLACER), 'g')
 
-let TAB_ALLOWED_CHARACTERS = ['\t']
-
 // HARD_RETURN holds a character sequence used to indicate text has a
 // hard (no-reflowing) line break.  Previously \r and \r\n were turned
 // into \n in marked's lexer- preprocessing step. So \r is safe to use
 // to indicate a hard (non-reflowed) return.
 let HARD_RETURN = '\r'
 
+function identity(str) {
+  return str
+}
+
+function cleanUpHtml(input: string): string {
+  return styles.gray(input.replace(/(<([^>]+)>)/ig, ''))
+}
+
 let defaultOptions = {
   code: identity,
   blockquote: identity,
-  html: styles.gray,
+  html: cleanUpHtml,
   heading: styles.magenta,
   firstHeading: styles.magenta,
   hr: identity,
@@ -32,7 +38,7 @@ let defaultOptions = {
   strong: styles.bold,
   em: styles.italic,
   codespan: styles.yellow,
-  del: styles.underline,
+  del: styles.strikethrough,
   link: styles.underline,
   href: styles.underline,
   text: identity,
@@ -48,22 +54,6 @@ function fixHardReturn(text, reflow) {
   return reflow ? text.replace(HARD_RETURN, /\n/g) : text
 }
 
-function sanitizeTab(tab, fallbackTab) {
-  if (typeof tab === 'number') {
-    return new Array(tab + 1).join(' ')
-  } else if (typeof tab === 'string' && isAllowedTabString(tab)) {
-    return tab
-  } else {
-    return new Array(fallbackTab + 1).join(' ')
-  }
-}
-
-function isAllowedTabString(str) {
-  return TAB_ALLOWED_CHARACTERS.some(function(char) {
-    return str.match('^(' + char + ')+$')
-  })
-}
-
 function indentLines(indent, text) {
   return text.replace(/(^|\n)(.+)/g, '$1' + indent + '$2')
 }
@@ -75,8 +65,7 @@ function indentify(indent, text) {
 
 let BULLET_POINT_REGEX = '\\*'
 let NUMBERED_POINT_REGEX = '\\d+\\.'
-let POINT_REGEX =
-  '(?:' + [BULLET_POINT_REGEX, NUMBERED_POINT_REGEX].join('|') + ')'
+let POINT_REGEX = '(?:' + [BULLET_POINT_REGEX, NUMBERED_POINT_REGEX].join('|') + ')'
 
 // Prevents nested lists from joining their parent list's last line
 function fixNestedLists(body, indent) {
@@ -157,11 +146,6 @@ function section(text) {
   return text + '\n\n'
 }
 
-function hr(inputHrStr, length) {
-  length = length || process.stdout.columns
-  return new Array(length).join(inputHrStr)
-}
-
 function undoColon(str) {
   return str.replace(COLON_REPLACER_REGEXP, ':')
 }
@@ -197,11 +181,11 @@ function unescapeEntities(html) {
     .replace(/&#39;/g, "'")
 }
 
-function identity(str) {
-  return str
-}
-
 const links: Map<string, string> = new Map()
+
+export interface RendererOptions {
+  sanitize?: boolean
+}
 
 class Renderer {
   private o: any
@@ -210,21 +194,14 @@ class Renderer {
   // private emoji: any
   private unescape: any
   private transform: any
-  constructor(public options: any = {}, public highlightOptions: any = {}) {
+  constructor(public options: RendererOptions = {}, public highlightOptions: any = {}) {
     this.o = Object.assign({}, defaultOptions, options)
-    this.tab = sanitizeTab(this.o.tab, defaultOptions.tab)
+    this.tab = '  '
     this.tableSettings = this.o.tableOptions
     // this.emoji = identity
     this.unescape = this.o.unescape ? unescapeEntities : identity
     this.highlightOptions = highlightOptions || {}
     this.transform = this.compose(undoColon, this.unescape)
-  }
-
-  // Compute length of str not including ANSI escape codes.
-  // See http://en.wikipedia.org/wiki/ANSI_escape_code#graphics
-  public textLength(str: string): number {
-    // eslint-disable-next-line no-control-regex
-    return str.replace(/\u001b\[(?:\d{1,3})(?:;\d{1,3})*m/g, '').length
   }
 
   public text(t: string): string {
@@ -255,7 +232,13 @@ class Renderer {
   }
 
   public hr(): string {
-    return `---\n\n`
+    // NOTE: the '─' character is conveniently translated into a window-wide
+    // horizontal rule by coc.nvim/autoload/coc/float.vim. Using this character
+    // causes the horizontal rule to appear like a proper hr separator. In case
+    // the user isn't benefiting from a floating window, we provide three
+    // characters so that the hr doesn't deviate too significantly from
+    // Markdown's normal '-'.
+    return `───\n`
   }
 
   public list(body, ordered): string {
@@ -329,17 +312,15 @@ class Renderer {
 
   public link(href, title, text): string {
     let prot: string
-    if (this.options.sanitize) {
-      try {
-        prot = decodeURIComponent(unescape(href))
-          .replace(/[^\w:]/g, '')
-          .toLowerCase()
-      } catch (e) {
-        return ''
-      }
-      if (prot.startsWith('javascript:')) {
-        return ''
-      }
+    try {
+      prot = decodeURIComponent(unescape(href))
+        .replace(/[^\w:]/g, '')
+        .toLowerCase()
+    } catch (e) {
+      return ''
+    }
+    if (prot.startsWith('javascript:')) {
+      return ''
     }
     if (text && href && text != href) {
       links.set(text, href)
@@ -350,9 +331,6 @@ class Renderer {
   }
 
   public image(href, title, text): string {
-    if (typeof this.o.image === 'function') {
-      return this.o.image(href, title, text)
-    }
     let out = '![' + text
     if (title) out += ' – ' + title
     return out + '](' + href + ')\n'

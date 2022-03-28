@@ -1,23 +1,17 @@
-import { Diagnostic, Emitter, Event, Range } from 'vscode-languageserver-protocol'
-import { DiagnosticCollection } from '../types'
+import { Diagnostic, DiagnosticSeverity, DiagnosticTag, Emitter, Event, Range } from 'vscode-languageserver-protocol'
 import { URI } from 'vscode-uri'
-import { emptyRange } from '../util/position'
 import workspace from '../workspace'
 const logger = require('../util/logger')('diagnostic-collection')
+const knownTags = [DiagnosticTag.Deprecated, DiagnosticTag.Unnecessary]
 
-export default class Collection implements DiagnosticCollection {
+export default class DiagnosticCollection {
   private diagnosticsMap: Map<string, Diagnostic[]> = new Map()
-  private _onDispose = new Emitter<void>()
   private _onDidDiagnosticsChange = new Emitter<string>()
-  private _onDidDiagnosticsClear = new Emitter<string[]>()
-
-  public readonly name: string
-  public readonly onDispose: Event<void> = this._onDispose.event
   public readonly onDidDiagnosticsChange: Event<string> = this._onDidDiagnosticsChange.event
-  public readonly onDidDiagnosticsClear: Event<string[]> = this._onDidDiagnosticsClear.event
 
-  constructor(owner: string) {
-    this.name = owner
+  constructor(
+    public readonly name: string,
+    private onDispose?: () => void) {
   }
 
   public set(uri: string, diagnostics: Diagnostic[] | undefined): void
@@ -39,7 +33,6 @@ export default class Collection implements DiagnosticCollection {
         } else {
           diagnostics = (diagnosticsPerFile.get(uri) || []).concat(diagnostics)
         }
-
         diagnosticsPerFile.set(uri, diagnostics)
       }
     }
@@ -47,42 +40,31 @@ export default class Collection implements DiagnosticCollection {
       let [uri, diagnostics] = item
       uri = URI.parse(uri).toString()
       diagnostics.forEach(o => {
-        o.range = o.range || Range.create(0, 0, 1, 0)
-        o.message = o.message || 'Empty error message'
-        if (emptyRange(o.range)) {
-          o.range.end = {
-            line: o.range.end.line,
-            character: o.range.end.character + 1
-          }
-        }
-        let { start, end } = o.range
-        // fix empty diagnostic at the and of line
-        if (end.character == 0 && end.line - start.line == 1 && start.character > 0) {
-          // add last character when start character is end
-          let doc = workspace.getDocument(uri)
-          if (doc) {
-            let line = doc.getline(start.line)
-            if (start.character == line.length) {
-              o.range.start.character = start.character - 1
-            }
-          }
-        }
+        // should be message for the file, but we need range
+        o.range = o.range || Range.create(0, 0, 0, 0)
+        o.message = o.message || ''
         o.source = o.source || this.name
+        if (Array.isArray(o.tags) && o.tags.some(t => knownTags.includes(t))) {
+          o.severity = DiagnosticSeverity.Hint
+        }
       })
       this.diagnosticsMap.set(uri, diagnostics)
       this._onDidDiagnosticsChange.fire(uri)
     }
-    return
   }
 
   public delete(uri: string): void {
     this.diagnosticsMap.delete(uri)
+    this._onDidDiagnosticsChange.fire(uri)
   }
 
   public clear(): void {
     let uris = Array.from(this.diagnosticsMap.keys())
+    uris = uris.filter(uri => this.diagnosticsMap.get(uri).length > 0)
     this.diagnosticsMap.clear()
-    this._onDidDiagnosticsClear.fire(uris)
+    for (let uri of uris) {
+      this._onDidDiagnosticsChange.fire(uri)
+    }
   }
 
   public forEach(callback: (uri: string, diagnostics: Diagnostic[], collection: DiagnosticCollection) => any, thisArg?: any): void {
@@ -94,7 +76,7 @@ export default class Collection implements DiagnosticCollection {
 
   public get(uri: string): Diagnostic[] {
     let arr = this.diagnosticsMap.get(uri)
-    return arr == null ? [] : arr
+    return arr == null ? [] : arr.slice()
   }
 
   public has(uri: string): boolean {
@@ -103,9 +85,7 @@ export default class Collection implements DiagnosticCollection {
 
   public dispose(): void {
     this.clear()
-    this._onDispose.fire(void 0)
-    this._onDispose.dispose()
-    this._onDidDiagnosticsClear.dispose()
+    if (this.onDispose) this.onDispose()
     this._onDidDiagnosticsChange.dispose()
   }
 }

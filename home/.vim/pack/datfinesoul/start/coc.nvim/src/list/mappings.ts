@@ -17,9 +17,6 @@ export default class Mappings {
     private config: ListConfiguration) {
     let { prompt } = manager
 
-    this.add('insert', '<C-k>', () => {
-      prompt.removeTail()
-    })
     this.add('insert', '<C-n>', () => {
       manager.session?.history.next()
     })
@@ -41,7 +38,6 @@ export default class Mappings {
       manager.stop()
       return
     })
-    this.add('insert', '<esc>', () => manager.cancel())
     this.add('insert', '<C-l>', async () => {
       await manager.session?.reloadItems()
     })
@@ -76,10 +72,6 @@ export default class Mappings {
     this.add('insert', ['<ScrollWheelDown>'], this.doScroll.bind(this, '<ScrollWheelDown>'))
     this.add('insert', ['<C-f>'], this.doScroll.bind(this, '<C-f>'))
     this.add('insert', ['<C-b>'], this.doScroll.bind(this, '<C-b>'))
-
-    this.add('normal', '<C-o>', () => {
-      // do nothing, avoid buffer switch by accident
-    })
     this.add('normal', 't', () => manager.doAction('tabe'))
     this.add('normal', 's', () => manager.doAction('split'))
     this.add('normal', 'd', () => manager.doAction('drop'))
@@ -91,7 +83,6 @@ export default class Mappings {
     this.add('normal', '<C-c>', () => {
       manager.stop()
     })
-    this.add('normal', '<esc>', () => manager.cancel())
     this.add('normal', '<C-l>', () => manager.session?.reloadItems())
     this.add('normal', '<C-o>', () => manager.session?.jumpBack())
     this.add('normal', '<C-e>', () => this.scrollPreview('down'))
@@ -153,11 +144,11 @@ export default class Mappings {
     let { session } = this.manager
     if (!session) return
     if (key == nextKey) {
-      session.ui.index = session.ui.index + 1
+      session.ui.moveDown()
       return true
     }
     if (key == previousKey) {
-      session.ui.index = session.ui.index - 1
+      session.ui.moveUp()
       return true
     }
     let expr = this.userInsertMappings.get(key)
@@ -202,7 +193,6 @@ export default class Mappings {
     let { nvim } = this
     await nvim.call('coc#prompt#stop_prompt', ['list'])
     window.showMessage(msg, 'error')
-    this.manager.prompt.start()
   }
 
   private async evalExpression(expr: string, _mode: string): Promise<void> {
@@ -253,6 +243,8 @@ export default class Mappings {
           return
         case 'togglemode':
           return manager.toggleMode()
+        case 'previewtoggle':
+          return manager.togglePreview()
         case 'previewup':
           return this.scrollPreview('up')
         case 'previewdown':
@@ -319,11 +311,11 @@ export default class Mappings {
     await this.manager.feedkeys(key)
   }
 
-  private async scrollPreview(dir: 'up' | 'down'): Promise<void> {
+  private scrollPreview(dir: 'up' | 'down'): void {
     let { nvim } = this
     nvim.pauseNotification()
-    nvim.call('coc#util#scroll_preview', [dir], true)
+    nvim.call('coc#list#scroll_preview', [dir], true)
     nvim.command('redraw', true)
-    await nvim.resumeNotification()
+    void nvim.resumeNotification(false, true)
   }
 }

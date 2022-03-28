@@ -7,17 +7,31 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import util from 'util'
+import { v4 as uuid } from 'uuid'
 import attach from '../attach'
+import events from '../events'
 import Document from '../model/document'
 import Plugin from '../plugin'
+import { OutputChannel, VimCompleteItem } from '../types'
+import { terminate } from '../util/processes'
 import workspace from '../workspace'
-import { v4 as uuid } from 'uuid'
-import { VimCompleteItem } from '../types'
+import completion from '../completion'
 
 export interface CursorPosition {
   bufnum: number
   lnum: number
   col: number
+}
+
+const nullChannel: OutputChannel = {
+  content: '',
+  show: () => {},
+  dispose: () => {},
+  name: 'null',
+  append: () => {},
+  appendLine: () => {},
+  clear: () => {},
+  hide: () => {}
 }
 
 process.on('uncaughtException', err => {
@@ -41,17 +55,21 @@ export class Helper extends EventEmitter {
     })
     let plugin = this.plugin = attach({ proc })
     this.nvim = plugin.nvim
-    this.nvim.uiAttach(160, 80, {}).catch(_e => {
-      // noop
-    })
-    proc.on('exit', () => {
-      this.proc = null
+    this.nvim.uiAttach(160, 80, {}).catch(e => {
+      console.error(e)
     })
     this.nvim.on('notification', (method, args) => {
       if (method == 'redraw') {
         for (let arg of args) {
           let event = arg[0]
           this.emit(event, arg.slice(1))
+          if (event == 'put') {
+            let arr = arg.slice(1).map(o => o[0])
+            let line = arr.join('').trim()
+            if (line.length > 3) {
+              // console.log(line)
+            }
+          }
         }
       }
     })
@@ -62,11 +80,18 @@ export class Helper extends EventEmitter {
 
   public async shutdown(): Promise<void> {
     this.plugin.dispose()
-    await this.nvim.quit()
+    this.nvim.removeAllListeners()
+    this.nvim = null
     if (this.proc) {
-      this.proc.kill('SIGKILL')
+      this.proc.unref()
+      terminate(this.proc)
+      this.proc = null
     }
     await this.wait(60)
+  }
+
+  public async triggerCompletion(source: string): Promise<void> {
+    await this.nvim.call('coc#start', { source })
   }
 
   public async waitPopup(): Promise<void> {
@@ -78,9 +103,18 @@ export class Helper extends EventEmitter {
     throw new Error('timeout after 2s')
   }
 
-  public async waitFloat(): Promise<number> {
+  public async waitPreviewWindow(): Promise<void> {
     for (let i = 0; i < 40; i++) {
       await this.wait(50)
+      let has = await this.nvim.call('coc#list#has_preview')
+      if (has > 0) return
+    }
+    throw new Error('timeout after 2s')
+  }
+
+  public async waitFloat(): Promise<number> {
+    for (let i = 0; i < 50; i++) {
+      await this.wait(20)
       let winid = await this.nvim.call('coc#float#get_float_win')
       if (winid) return winid
     }
@@ -97,12 +131,16 @@ export class Helper extends EventEmitter {
 
   public async reset(): Promise<void> {
     let mode = await this.nvim.mode
-    if (mode.mode != 'n' || mode.blocking) {
-      await this.nvim.command('stopinsert')
+    if (mode.blocking && mode.mode == 'r') {
+      await this.nvim.input('<cr>')
+    } else if (mode.mode != 'n' || mode.blocking) {
       await this.nvim.call('feedkeys', [String.fromCharCode(27), 'in'])
     }
+    completion.reset()
+    workspace.reset()
     await this.nvim.command('silent! %bwipeout!')
-    await this.wait(80)
+    await this.wait(30)
+    await workspace.document
   }
 
   public async pumvisible(): Promise<boolean> {
@@ -155,9 +193,8 @@ export class Helper extends EventEmitter {
     }
     let escaped = await this.nvim.call('fnameescape', file) as string
     await this.nvim.command(`edit ${escaped}`)
-    await this.wait(60)
-    let bufnr = await this.nvim.call('bufnr', ['%']) as number
-    return this.nvim.createBuffer(bufnr)
+    let doc = await workspace.document
+    return doc.buffer
   }
 
   public async createDocument(name?: string): Promise<Document> {
@@ -165,6 +202,10 @@ export class Helper extends EventEmitter {
     let doc = workspace.getDocument(buf.id)
     if (!doc) return await workspace.document
     return doc
+  }
+
+  public async listInput(input: string): Promise<void> {
+    await events.fire('InputChar', ['list', input, 0])
   }
 
   public async getMarkers(bufnr: number, ns: number): Promise<[number, number, number][]> {
@@ -181,19 +222,21 @@ export class Helper extends EventEmitter {
     return str.trim()
   }
 
-  public updateConfiguration(key: string, value: any): void {
-    let { configurations } = workspace as any
+  public updateConfiguration(key: string, value: any): () => void {
+    let { configurations } = workspace
+    let curr = workspace.getConfiguration(key)
     configurations.updateUserConfig({ [key]: value })
+    return () => {
+      configurations.updateUserConfig({ [key]: curr })
+    }
   }
 
   public async mockFunction(name: string, result: string | number | any): Promise<void> {
     let content = `
     function! ${name}(...)
-      return ${JSON.stringify(result)}
-    endfunction
-    `
-    let file = await createTmpFile(content)
-    await this.nvim.command(`source ${file}`)
+      return ${typeof result == 'number' ? result : JSON.stringify(result)}
+    endfunction`
+    await this.nvim.exec(content)
   }
 
   public async items(): Promise<VimCompleteItem[]> {
@@ -229,6 +272,48 @@ export class Helper extends EventEmitter {
     if (!ids) return []
     return ids.map(id => this.nvim.createWindow(id))
   }
+
+  public async waitFor<T>(method: string, args: any[], value: T): Promise<void> {
+    let find = false
+    for (let i = 0; i < 40; i++) {
+      await this.wait(50)
+      let res = await this.nvim.call(method, args) as T
+      if (res == value) {
+        find = true
+        break
+      }
+    }
+    if (!find) {
+      throw new Error(`waitFor ${value} timeout`)
+    }
+  }
+
+  public async waitValue<T>(fn: () => T, value: T): Promise<void> {
+    let find = false
+    for (let i = 0; i < 40; i++) {
+      await this.wait(50)
+      let res = fn()
+      if (res == value) {
+        find = true
+        break
+      }
+    }
+    if (!find) {
+      throw new Error(`waitValue ${value} timeout`)
+    }
+  }
+
+  public createNullChannel(): OutputChannel {
+    return nullChannel
+  }
+}
+
+export function rmdir(dir: string): void {
+  if (typeof fs['rm'] === 'function') {
+    fs['rmSync'](dir, { recursive: true })
+  } else {
+    fs.rmdirSync(dir, { recursive: true })
+  }
 }
 
 export async function createTmpFile(content: string): Promise<string> {
@@ -236,9 +321,9 @@ export async function createTmpFile(content: string): Promise<string> {
   if (!fs.existsSync(tmpFolder)) {
     fs.mkdirSync(tmpFolder)
   }
-  let filename = path.join(tmpFolder, uuid())
-  await util.promisify(fs.writeFile)(filename, content, 'utf8')
-  return filename
+  let fsPath = path.join(tmpFolder, uuid())
+  await util.promisify(fs.writeFile)(fsPath, content, 'utf8')
+  return fsPath
 }
 
 export default new Helper()

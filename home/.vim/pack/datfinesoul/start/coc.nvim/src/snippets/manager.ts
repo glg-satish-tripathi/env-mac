@@ -1,30 +1,30 @@
-import { Disposable, Range } from 'vscode-languageserver-protocol'
+import { Disposable, InsertTextMode, Range } from 'vscode-languageserver-protocol'
 import events from '../events'
-import * as types from '../types'
+import { StatusBarItem } from '../model/status'
 import workspace from '../workspace'
 import window from '../window'
 import * as Snippets from "./parser"
 import { SnippetSession } from './session'
 import { SnippetVariableResolver } from './variableResolve'
+import { SnippetString } from './string'
 const logger = require('../util/logger')('snippets-manager')
 
-export class SnippetManager implements types.SnippetManager {
+export class SnippetManager {
   private sessionMap: Map<number, SnippetSession> = new Map()
   private disposables: Disposable[] = []
-  private statusItem: types.StatusBarItem
+  private statusItem: StatusBarItem
 
   constructor() {
-    workspace.onDidChangeTextDocument(async (e: types.DidChangeTextDocumentParams) => {
+    workspace.onDidChangeTextDocument(async e => {
       let session = this.getSession(e.bufnr)
       if (session) {
-        await session.synchronizeUpdatedPlaceholders(e.contentChanges[0])
+        let firstLine = e.originalLines[e.contentChanges[0].range.start.line] || ''
+        await session.synchronizeUpdatedPlaceholders(e.contentChanges[0], firstLine)
       }
     }, null, this.disposables)
 
-    workspace.onDidCloseTextDocument(textDocument => {
-      let doc = workspace.getDocument(textDocument.uri)
-      if (!doc) return
-      let session = this.getSession(doc.bufnr)
+    workspace.onDidCloseTextDocument(ev => {
+      let session = this.getSession(ev.bufnr)
       if (session) session.deactivate()
     }, null, this.disposables)
 
@@ -54,7 +54,7 @@ export class SnippetManager implements types.SnippetManager {
   /**
    * Insert snippet at current cursor position
    */
-  public async insertSnippet(snippet: string, select = true, range?: Range): Promise<boolean> {
+  public async insertSnippet(snippet: string | SnippetString, select = true, range?: Range, insertTextMode?: InsertTextMode, ultisnip = false): Promise<boolean> {
     let { bufnr } = workspace
     let session = this.getSession(bufnr)
     if (!session) {
@@ -67,7 +67,8 @@ export class SnippetManager implements types.SnippetManager {
         }
       })
     }
-    let isActive = await session.start(snippet, select, range)
+    let snippetStr = SnippetString.isSnippetString(snippet) ? snippet.value : snippet
+    let isActive = await session.start(snippetStr, select, range, insertTextMode, ultisnip)
     if (isActive) this.statusItem.show()
     return isActive
   }
@@ -77,18 +78,26 @@ export class SnippetManager implements types.SnippetManager {
     if (session) return await session.selectCurrentPlaceholder(triggerAutocmd)
   }
 
-  public async nextPlaceholder(): Promise<void> {
+  public async nextPlaceholder(): Promise<string> {
     let { session } = this
-    if (session) return await session.nextPlaceholder()
-    workspace.nvim.call('coc#snippet#disable', [], true)
-    this.statusItem.hide()
+    if (session) {
+      await session.nextPlaceholder()
+    } else {
+      workspace.nvim.call('coc#snippet#disable', [], true)
+      this.statusItem.hide()
+    }
+    return ''
   }
 
-  public async previousPlaceholder(): Promise<void> {
+  public async previousPlaceholder(): Promise<string> {
     let { session } = this
-    if (session) return await session.previousPlaceholder()
-    workspace.nvim.call('coc#snippet#disable', [], true)
-    this.statusItem.hide()
+    if (session) {
+      await session.previousPlaceholder()
+    } else {
+      workspace.nvim.call('coc#snippet#disable', [], true)
+      this.statusItem.hide()
+    }
+    return ''
   }
 
   public cancel(): void {
@@ -105,7 +114,7 @@ export class SnippetManager implements types.SnippetManager {
 
   public isActived(bufnr: number): boolean {
     let session = this.getSession(bufnr)
-    return session && session.isActive
+    return session && session.isActive ? true : false
   }
 
   public jumpable(): boolean {
@@ -122,8 +131,8 @@ export class SnippetManager implements types.SnippetManager {
     return this.sessionMap.get(bufnr)
   }
 
-  public async resolveSnippet(body: string): Promise<Snippets.TextmateSnippet> {
-    let parser = new Snippets.SnippetParser()
+  public async resolveSnippet(body: string, ultisnip = false): Promise<Snippets.TextmateSnippet> {
+    let parser = new Snippets.SnippetParser(ultisnip)
     const snippet = parser.parse(body, true)
     const resolver = new SnippetVariableResolver()
     await snippet.resolveVariables(resolver)

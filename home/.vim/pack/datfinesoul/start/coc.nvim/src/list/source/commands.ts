@@ -30,11 +30,10 @@ export default class CommandsList extends BasicList {
 
   public async loadItems(_context: ListContext): Promise<ListItem[]> {
     let items: UnformattedListItem[] = []
-    let list = commandManager.commandList
-    let { titles } = commandManager
     let mruList = await this.mru.load()
-    for (const o of list) {
-      const { id } = o
+    let { commandList, onCommandList, titles } = commandManager
+    let ids = commandList.map(c => c.id).concat(onCommandList)
+    for (const id of [...new Set(ids)]) {
       items.push({
         label: [id, ...(titles.get(id) ? [titles.get(id)] : [])],
         filterText: id,
@@ -50,9 +49,7 @@ export default class CommandsList extends BasicList {
     nvim.pauseNotification()
     nvim.command('syntax match CocCommandsTitle /\\t.*$/ contained containedin=CocCommandsLine', true)
     nvim.command('highlight default link CocCommandsTitle Comment', true)
-    nvim.resumeNotification().catch(_e => {
-      // noop
-    })
+    void nvim.resumeNotification(false, true)
   }
 }
 

@@ -19,6 +19,7 @@ fi
 # assign the branch to a BRANCH variable
 local BRANCH="$(git symbolic-ref --short HEAD 2> /dev/null)"
 local TRACKING="$(git for-each-ref --format='%(upstream:short)' $(git symbolic-ref -q HEAD))"
+[[ -n "${TRACKING}" ]] && TRACKING="\e[32mT\e[m" || TRACKING='X'
 # tracking branch
 # git rev-parse --abbrev-ref --symbolic-full-name @{u}
 # git for-each-ref --format='%(upstream:short)' $(git symbolic-ref -q HEAD)
@@ -42,7 +43,7 @@ else
   local COLOR="\e[m"
 fi
 
-printf "\e[33m(${COLOR}${BRANCH}\e[33m -> ${TRACKING})\e[m"
+printf "\e[33m(${TRACKING} ${COLOR}${BRANCH}\e[33m)\e[m"
 }
 
 ps1_nvm () {
@@ -55,11 +56,17 @@ ps1_nvm () {
 
 ps1_tf () {
   local TF
-  TF="$(tf version --json | jq -r .terraform_version)"
+  if which terraform > /dev/null; then
+    TF="$(terraform version --json | jq -r .terraform_version)"
+  else
+    TF="n/a"
+  fi
+
   printf '%s' "tf:${TF}"
 }
 
+# \$(TZ='Asia/Kolkata' date '+%F %T %Z')
 export PS1="${COLOR_CLEAR}
 ${COLOR_YELLOW}\w${COLOR_CLEAR}
-\t \$(git_ps1_info) \$(ps1_nvm) \$(ps1_tf)
+\t \$(date '+%Z') \$(git_ps1_info) \$(ps1_nvm) \$(ps1_tf)
 ${COLOR_LGREEN}→${COLOR_CLEAR} "

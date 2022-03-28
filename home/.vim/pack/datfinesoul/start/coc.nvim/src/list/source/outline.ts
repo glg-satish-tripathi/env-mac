@@ -24,7 +24,7 @@ export default class Outline extends LocationList {
   public options: ListArgument[] = [{
     name: '-k, -kind KIND',
     hasValue: true,
-    description: 'filters also by kind',
+    description: 'filter symbol by kind',
   }]
 
   public async loadItems(context: ListContext, token: CancellationToken): Promise<ListItem[]> {
@@ -103,7 +103,7 @@ export default class Outline extends LocationList {
     nvim.command('highlight default link CocOutlineIndentLine Comment', true)
     nvim.command('highlight default link CocOutlineKind Typedef', true)
     nvim.command('highlight default link CocOutlineLine Comment', true)
-    nvim.resumeNotification(false, true).logError()
+    void nvim.resumeNotification(false, true)
   }
 
   public async loadCtagsSymbols(document: Document): Promise<ListItem[]> {
@@ -127,7 +127,7 @@ export default class Outline extends LocationList {
     }
     content = content.trim()
     if (!content) return []
-    let lines = content.split('\n')
+    let lines = content.split(/\r?\n/)
     let items: ListItem[] = []
     for (let line of lines) {
       let parts = line.split('\t')

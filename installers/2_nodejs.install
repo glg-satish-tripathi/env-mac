@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# shellcheck disable=SC1090
-source "$(dirname "$(readlink -e -- "$0")")/core.source"
-
-sudo apt-get --yes remove nodejs || true
-
-set -o pipefail
-curl -sL https://deb.nodesource.com/setup_14.x | sudo -E bash -
-sudo apt-get install --yes nodejs

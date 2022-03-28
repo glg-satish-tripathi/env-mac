@@ -1,7 +1,6 @@
 import { Neovim } from '@chemzqm/neovim'
 import { CancellationTokenSource, Emitter, Event } from 'vscode-languageserver-protocol'
-import { ListItemWithHighlights } from '..'
-import { IList, ListContext, ListHighlights, ListItem, ListItemsEvent, ListOptions, ListTask } from '../types'
+import { IList, ListContext, ListHighlights, ListItem, ListItemsEvent, ListItemWithHighlights, ListOptions, ListTask } from '../types'
 import { parseAnsiHighlights } from '../util/ansiparse'
 import { patchLine } from '../util/diff'
 import { hasMatch, positions, score } from '../util/fzy'
@@ -52,6 +51,7 @@ export default class Worker {
   }
 
   public async loadItems(context: ListContext, reload = false): Promise<void> {
+    if (reload) void window.showNotification({ content: 'Reloading list', timeout: 500 })
     let { list, listOptions } = this
     this.loading = true
     let { interactive } = listOptions
@@ -141,10 +141,8 @@ export default class Worker {
         }
       }
       let disposable = token.onCancellationRequested(() => {
-        if (task) {
-          task.dispose()
-          onEnd()
-        }
+        task?.dispose()
+        onEnd()
       })
       task.on('error', async (error: Error | string) => {
         if (task == null) return
@@ -154,8 +152,8 @@ export default class Worker {
         disposable.dispose()
         if (timer) clearTimeout(timer)
         this.nvim.call('coc#prompt#stop_prompt', ['list'], true)
-        window.showMessage(`Task error: ${error.toString()}`, 'error')
-        logger.error(error)
+        this.nvim.echoError(`Task error: ${error.toString()}`)
+        logger.error('Task error:', error)
       })
       task.on('end', onEnd)
     }
@@ -165,13 +163,9 @@ export default class Worker {
    * Draw all items with filter if necessary
    */
   public drawItems(): void {
-    let { totalItems, listOptions } = this
+    let { totalItems } = this
     let items: ListItemWithHighlights[]
-    if (listOptions.interactive) {
-      items = this.convertToHighlightItems(totalItems)
-    } else {
-      items = this.filterItems(totalItems)
-    }
+    items = this.filterItems(totalItems)
     this._onDidChangeItems.fire({ items, finished: true })
   }
 
@@ -199,9 +193,8 @@ export default class Worker {
     if (!input) return []
     return items.map(item => {
       let filterLabel = getFilterLabel(item)
-      if (filterLabel == '') return item
       let res = getMatchResult(filterLabel, input)
-      if (!res || !res.score) return item
+      if (!res?.score) return item
       let highlights = this.getHighlights(filterLabel, res.matches)
       return Object.assign({}, item, { highlights })
     })
@@ -211,7 +204,7 @@ export default class Worker {
     let { input } = this
     let { sort, matcher, ignorecase } = this.listOptions
     let inputs = this.config.extendedSearchMode ? parseInput(input) : [input]
-    if (input.length == 0 || inputs.length == 0) return items
+    if (input.length == 0 || inputs.length == 0) return items.slice()
     if (matcher == 'strict') {
       let filtered: ListItemWithHighlights[] = []
       for (let item of items) {

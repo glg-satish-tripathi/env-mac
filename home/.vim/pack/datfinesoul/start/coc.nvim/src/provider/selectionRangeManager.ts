@@ -4,7 +4,7 @@ import { SelectionRangeProvider } from './index'
 import Manager from './manager'
 import { v4 as uuid } from 'uuid'
 
-export default class SelectionRangeManager extends Manager<SelectionRangeProvider> implements Disposable {
+export default class SelectionRangeManager extends Manager<SelectionRangeProvider>  {
 
   public register(selector: DocumentSelector, provider: SelectionRangeProvider): Disposable {
     let item = {
@@ -26,10 +26,12 @@ export default class SelectionRangeManager extends Manager<SelectionRangeProvide
     let item = this.getProvider(document)
     if (!item) return null
     let { provider } = item
-    return (await Promise.resolve(provider.provideSelectionRanges(document, positions, token)) || [])
-  }
-
-  public dispose(): void {
-    this.providers = new Set()
+    let ranges: SelectionRange[] = await Promise.resolve(provider.provideSelectionRanges(document, positions, token))
+    if (!ranges || ranges.length == 0) return []
+    for (let i = 0; i < ranges.length - 1; i++) {
+      let r = ranges[i]
+      if (!r.parent) r.parent = ranges[i + 1]
+    }
+    return ranges
   }
 }

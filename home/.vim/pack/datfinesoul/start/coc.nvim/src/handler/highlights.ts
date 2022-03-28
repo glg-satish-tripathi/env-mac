@@ -3,30 +3,56 @@ import { CancellationTokenSource, Disposable, DocumentHighlight, DocumentHighlig
 import events from '../events'
 import languages from '../languages'
 import Document from '../model/document'
+import { ConfigurationChangeEvent, HandlerDelegate } from '../types'
 import { disposeAll } from '../util'
-import window from '../window'
 import workspace from '../workspace'
 const logger = require('../util/logger')('documentHighlight')
 
+interface HighlightConfig {
+  priority: number
+  timeout: number
+}
+
 /**
- * Highlights of symbol under cursor.
+ * Highlight same symbols on current window.
+ * Highlights are added to window by matchaddpos.
  */
 export default class Highlights {
+  private config: HighlightConfig
   private disposables: Disposable[] = []
   private tokenSource: CancellationTokenSource
   private highlights: Map<number, DocumentHighlight[]> = new Map()
-  constructor(private nvim: Neovim) {
-    events.on(['TextChanged', 'TextChangedI', 'CursorMoved', 'CursorMovedI'], () => {
+  private timer: NodeJS.Timer
+  constructor(private nvim: Neovim, private handler: HandlerDelegate) {
+    events.on(['CursorMoved', 'CursorMovedI'], () => {
       this.cancel()
       this.clearHighlights()
     }, null, this.disposables)
+    this.getConfiguration()
+    workspace.onDidChangeConfiguration(this.getConfiguration, this, this.disposables)
+  }
+
+  private getConfiguration(e?: ConfigurationChangeEvent): void {
+    let config = workspace.getConfiguration('documentHighlight')
+    if (!e || e.affectsConfiguration('documentHighlight')) {
+      this.config = Object.assign(this.config || {}, {
+        priority: config.get<number>('priority', -1),
+        timeout: config.get<number>('timeout', 300)
+      })
+    }
+  }
+
+  public isEnabled(bufnr: number, cursors: number): boolean {
+    let doc = workspace.getDocument(bufnr)
+    if (!doc || !doc.attached || cursors) return false
+    if (!languages.hasProvider('documentHighlight', doc.textDocument)) return false
+    return true
   }
 
   public clearHighlights(): void {
     if (this.highlights.size == 0) return
-    let { nvim } = workspace
     for (let winid of this.highlights.keys()) {
-      let win = nvim.createWindow(winid)
+      let win = this.nvim.createWindow(winid)
       win.clearMatchGroup('^CocHighlight')
     }
     this.highlights.clear()
@@ -35,12 +61,10 @@ export default class Highlights {
   public async highlight(): Promise<void> {
     let { nvim } = this
     this.cancel()
-    let [bufnr, winid, cursors] = await nvim.eval(`[bufnr('%'),win_getid(),get(b:,'coc_cursors_activated',0)]`) as [number, number, number]
+    let [bufnr, winid, pos, cursors] = await nvim.eval(`[bufnr("%"),win_getid(),coc#cursor#position(),get(b:,'coc_cursors_activated',0)]`) as [number, number, [number, number], number]
+    if (!this.isEnabled(bufnr, cursors)) return
     let doc = workspace.getDocument(bufnr)
-    if (!doc || !doc.attached || !languages.hasProvider('documentHighlight', doc.textDocument)) return
-    if (cursors) return
-    let position = await window.getCursorPosition()
-    let highlights = await this.getHighlights(doc, position)
+    let highlights = await this.getHighlights(doc, Position.create(pos[0], pos[1]))
     if (!highlights) return
     let groups: { [index: string]: Range[] } = {}
     for (let hl of highlights) {
@@ -55,37 +79,39 @@ export default class Highlights {
     nvim.pauseNotification()
     win.clearMatchGroup('^CocHighlight')
     for (let hlGroup of Object.keys(groups)) {
-      win.highlightRanges(hlGroup, groups[hlGroup], -1, true)
+      win.highlightRanges(hlGroup, groups[hlGroup], this.config.priority, true)
     }
-    if (workspace.isVim) nvim.command('redraw', true)
-    let res = this.nvim.resumeNotification()
-    if (Array.isArray(res) && res[1] != null) {
-      logger.error(`Error on highlight`, res[1][2])
-    } else {
-      this.highlights.set(winid, highlights)
-    }
+    void nvim.resumeNotification(true, true)
+    this.highlights.set(winid, highlights)
+  }
+
+  public async getSymbolsRanges(): Promise<Range[]> {
+    let { doc, position } = await this.handler.getCurrentState()
+    this.handler.checkProvier('documentHighlight', doc.textDocument)
+    let highlights = await this.getHighlights(doc, position)
+    if (!highlights) return null
+    return highlights.map(o => o.range)
   }
 
   public hasHighlights(winid: number): boolean {
     return this.highlights.get(winid) != null
   }
 
-  public async getHighlights(doc: Document | null, position: Position): Promise<DocumentHighlight[]> {
-    if (!doc || !doc.attached || doc.isCommandLine) return null
+  public async getHighlights(doc: Document, position: Position): Promise<DocumentHighlight[]> {
     let line = doc.getline(position.line)
     let ch = line[position.character]
     if (!ch || !doc.isWord(ch)) return null
-    try {
-      this.tokenSource = new CancellationTokenSource()
-      doc.forceSync()
-      let { token } = this.tokenSource
-      let highlights = await languages.getDocumentHighLight(doc.textDocument, position, token)
-      this.tokenSource = null
-      if (token.isCancellationRequested) return null
-      return highlights
-    } catch (_e) {
-      return null
-    }
+    await doc.synchronize()
+    this.cancel()
+    let source = this.tokenSource = new CancellationTokenSource()
+    let timer = this.timer = setTimeout(() => {
+      if (source.token.isCancellationRequested) return
+      source.cancel()
+    }, this.config.timeout)
+    let highlights = await languages.getDocumentHighLight(doc.textDocument, position, source.token)
+    clearTimeout(timer)
+    if (source.token.isCancellationRequested) return null
+    return highlights
   }
 
   private cancel(): void {
@@ -97,8 +123,9 @@ export default class Highlights {
   }
 
   public dispose(): void {
-    this.highlights.clear()
+    if (this.timer) clearTimeout(this.timer)
     this.cancel()
+    this.highlights.clear()
     disposeAll(this.disposables)
   }
 }

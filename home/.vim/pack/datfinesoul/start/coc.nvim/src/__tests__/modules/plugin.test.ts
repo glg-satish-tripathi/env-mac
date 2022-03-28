@@ -32,9 +32,17 @@ describe('help tags', () => {
   })
 
   it('should show CocInfo', async () => {
-    await nvim.call('CocActionAsync', ['showInfo'])
-    await helper.wait(300)
+    await helper.doAction('showInfo')
     let line = await nvim.line
-    expect(line).toMatch('versions')
+    expect(line).toMatch('version')
+  })
+
+  it('should ensure current document created', async () => {
+    await nvim.command('tabe tmp.js')
+    let res = await helper.plugin.cocAction('ensureDocument')
+    expect(res).toBe(true)
+    let bufnr = await nvim.call('bufnr', ['%'])
+    let doc = workspace.getDocument(bufnr)
+    expect(doc).toBeDefined()
   })
 })

@@ -1,14 +1,21 @@
-#!/usr/bin/env bash
+#!/usr/bin/env /home/phadviger/env-ubuntu/env-ubuntu-core
+# NOTE: OSX requires shebang to be binary file not script, this is the workaround
 # shellcheck disable=SC1090
-source "$(dirname "$(readlink -e -- "$0")")/core.source"
+. "${SCRIPT_DIR}/core.source"
 
-curl -L 'https://sw.kovidgoyal.net/kitty/installer.sh' | \
-  sh /dev/stdin launch=n
+if [[ "$(uname -s)" == "Darwin" ]]; then
+	>&2 echo 'No Darwin Install'
+else
+  curl -L 'https://sw.kovidgoyal.net/kitty/installer.sh' | \
+    sh /dev/stdin launch=n
 
-mkdir -p "${HOME}/.local/bin/"
-ln -sf "${HOME}/.local/kitty.app/bin/kitty" "${HOME}/.local/bin/"
-cp "${HOME}/.local/kitty.app/share/applications/kitty.desktop" "${HOME}/.local/share/applications"
-rsync -avz "${HOME}/.local/kitty.app/share/icons/"* "${HOME}/.local/share/icons/"
+  mkdir -p "${HOME}/.local/bin/"
+  ln -sf "${HOME}/.local/kitty.app/bin/kitty" "${HOME}/.local/bin/"
+  cp "${HOME}/.local/kitty.app/share/applications/kitty.desktop" "${HOME}/.local/share/applications"
+  rsync -avz "${HOME}/.local/kitty.app/share/icons/"* "${HOME}/.local/share/icons/"
 
-sed -i -e 's|Icon=kitty|Icon=/home/'"${USER}"'/.local/share/icons/hicolor/256x256/apps/kitty.png|g' \
-  "${HOME}/.local/share/applications/kitty.desktop"
+  sed -i -e 's|Icon=kitty|Icon=/home/'"${USER}"'/.local/share/icons/hicolor/256x256/apps/kitty.png|g' \
+    "${HOME}/.local/share/applications/kitty.desktop"
+fi
+
+# vim: set ft=bash :

@@ -1,23 +1,31 @@
+import { Neovim } from '@chemzqm/neovim'
 import path from 'path'
 import diagnosticManager from '../../diagnostic/manager'
-import { DiagnosticItem, ListContext, ListItem } from '../../types'
-import LocationList from './location'
+import { ListContext, ListItem } from '../../types'
 import { isParentFolder } from '../../util/fs'
 import { formatListItems, formatPath, PathFormatting, UnformattedListItem } from '../formatting'
+import { ListManager } from '../manager'
+import LocationList from './location'
 const logger = require('../../util/logger')('list-symbols')
 
 export default class DiagnosticsList extends LocationList {
   public readonly defaultAction = 'open'
   public readonly description = 'diagnostics of current workspace'
   public name = 'diagnostics'
+  public constructor(nvim: Neovim, manager: ListManager) {
+    super(nvim)
+    diagnosticManager.onDidRefresh(async () => {
+      let session = manager.getSession('diagnostics')
+      if (session) await session.reloadItems()
+    }, null, this.disposables)
+  }
 
   public async loadItems(context: ListContext): Promise<ListItem[]> {
-    let list: DiagnosticItem[] = diagnosticManager.getDiagnosticList()
+    let list = diagnosticManager.getDiagnosticList()
     let { cwd } = context
-
-    const shouldIncludeCode = this.getConfig().get<boolean>('includeCode', true)
-    const pathFormat = this.getConfig().get<PathFormatting>('pathFormat', "full")
-
+    const config = this.getConfig()
+    const shouldIncludeCode = config.get<boolean>('includeCode', true)
+    const pathFormat = config.get<PathFormatting>('pathFormat', "full")
     const unformatted: UnformattedListItem[] = list.map(item => {
       const file = isParentFolder(cwd, item.file) ? path.relative(cwd, item.file) : item.file
       const formattedPath = formatPath(pathFormat, file)
@@ -44,9 +52,7 @@ export default class DiagnosticsList extends LocationList {
     nvim.command('highlight default link CocDiagnosticsWarning CocWarningSign', true)
     nvim.command('highlight default link CocDiagnosticsInfo CocInfoSign', true)
     nvim.command('highlight default link CocDiagnosticsHint CocHintSign', true)
-    nvim.resumeNotification().catch(_e => {
-      // noop
-    })
+    void nvim.resumeNotification(false, true)
   }
 }
 

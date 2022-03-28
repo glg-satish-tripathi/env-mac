@@ -4,7 +4,6 @@ import { parse, UrlWithStringQuery } from 'url'
 import fs from 'fs'
 import { objectLiteral } from '../util/is'
 import workspace from '../workspace'
-import { FetchOptions } from '../types'
 import { stringify } from 'querystring'
 import createHttpProxyAgent, { HttpProxyAgent } from 'http-proxy-agent'
 import createHttpsProxyAgent, { HttpsProxyAgent } from 'https-proxy-agent'
@@ -19,6 +18,40 @@ export interface ProxyOptions {
   strictSSL?: boolean
   proxyAuthorization?: string | null
   proxyCA?: string | null
+}
+
+export interface FetchOptions {
+  /**
+   * Default to 'GET'
+   */
+  method?: string
+  /**
+   * Default no timeout
+   */
+  timeout?: number
+  /**
+   * Always return buffer instead of parsed response.
+   */
+  buffer?: boolean
+  /**
+   * - 'string' for text response content
+   * - 'object' for json response content
+   * - 'buffer' for response not text or json
+   */
+  data?: string | { [key: string]: any } | Buffer
+  /**
+   * Plain object added as query of url
+   */
+  query?: { [key: string]: unknown }
+  headers?: any
+  /**
+   * User for http basic auth, should use with password
+   */
+  user?: string
+  /**
+   * Password for http basic auth, should use with user
+   */
+  password?: string
 }
 
 function getSystemProxyURI(endpoint: UrlWithStringQuery): string {
@@ -135,6 +168,7 @@ function request(url: string, data: any, opts: any, token?: CancellationToken): 
         req.destroy(new Error('request aborted'))
       })
     }
+    let timer: NodeJS.Timer
     const req = mod.request(opts, res => {
       let readable: Readable = res
       if ((res.statusCode >= 200 && res.statusCode < 300) || res.statusCode === 1223) {
@@ -146,6 +180,7 @@ function request(url: string, data: any, opts: any, token?: CancellationToken): 
           chunks.push(chunk)
         })
         readable.on('end', () => {
+          if (timer) clearTimeout(timer)
           let buf = Buffer.concat(chunks)
           if (!opts.buffer && (contentType.startsWith('application/json') || contentType.startsWith('text/'))) {
             let ms = contentType.match(/charset=(\S+)/)
@@ -172,7 +207,16 @@ function request(url: string, data: any, opts: any, token?: CancellationToken): 
         reject(new Error(`Bad response from ${url}: ${res.statusCode}`))
       }
     })
-    req.on('error', reject)
+    req.on('error', e => {
+      // Possible succeed proxy request with ECONNRESET error on node > 14
+      if (opts.agent && e.code == 'ECONNRESET') {
+        timer = setTimeout(() => {
+          reject(e)
+        }, 500)
+      } else {
+        reject(e)
+      }
+    })
     req.on('timeout', () => {
       req.destroy(new Error(`Request timeout after ${opts.timeout}ms`))
     })

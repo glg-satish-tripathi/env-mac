@@ -1,14 +1,18 @@
-import { attach, NeovimClient } from '@chemzqm/neovim'
+import { attach, Attach, NeovimClient } from '@chemzqm/neovim'
 import log4js from 'log4js'
-import { Attach } from '@chemzqm/neovim/lib/attach/attach'
 import events from './events'
 import Plugin from './plugin'
 import semver from 'semver'
 import { objectLiteral } from './util/is'
-import './util/extensions'
 import { URI } from 'vscode-uri'
+import { version as VERSION } from '../package.json'
+
 const logger = require('./util/logger')('attach')
 const isTest = global.hasOwnProperty('__TEST__')
+/**
+ * Request actions that not need plugin ready
+ */
+const ACTIONS_NO_WAIT = ['installExtensions', 'updateExtensions']
 
 export default (opts: Attach, requestApi = true): Plugin => {
   const nvim: NeovimClient = attach(opts, log4js.getLogger('node-client'), requestApi)
@@ -37,6 +41,10 @@ export default (opts: Attach, requestApi = true): Plugin => {
         }
         break
       }
+      case 'Log': {
+        logger.debug(...args)
+        break
+      }
       case 'TaskExit':
       case 'TaskStderr':
       case 'TaskStdout':
@@ -49,14 +57,15 @@ export default (opts: Attach, requestApi = true): Plugin => {
         await events.fire(method, args)
         break
       case 'CocAutocmd':
-        logger.debug('Notification autocmd:', ...args)
+        logger.trace('Notification autocmd:', ...args)
         await events.fire(args[0], args.slice(1))
+        break
+      case 'redraw':
         break
       default: {
         let exists = plugin.hasAction(method)
         if (!exists) {
-          if (global.hasOwnProperty('__TEST__')) return
-          console.error(`action "${method}" not registered`)
+          console.error(`action "${method}" not exists`)
           return
         }
         try {
@@ -68,7 +77,7 @@ export default (opts: Attach, requestApi = true): Plugin => {
           await plugin.ready
           await plugin.cocAction(method, ...args)
         } catch (e) {
-          console.error(`Error on notification "${method}": ${e.message || e.toString()}`)
+          console.error(`Error on "${method}": ${e.message || e.toString()}`)
           logger.error(`Notification error:`, method, args, e)
         }
       }
@@ -76,21 +85,26 @@ export default (opts: Attach, requestApi = true): Plugin => {
   })
 
   nvim.on('request', async (method: string, args, resp) => {
-    if (method != 'redraw') {
-      logger.info('receive request:', method, args)
+    if (method == 'redraw') {
+      // ignore redraw from neovim
+      resp.send()
+      return
     }
     let timer = setTimeout(() => {
       logger.error('Request cost more than 3s', method, args)
     }, 3000)
     try {
       if (method == 'CocAutocmd') {
-        logger.debug('Request autocmd:', ...args)
+        logger.trace('Request autocmd:', ...args)
         await events.fire(args[0], args.slice(1))
-        resp.send()
+        resp.send(undefined)
       } else {
-        if (!plugin.isReady) {
-          logger.warn(`Plugin not ready when received "${method}"`, args)
+        if (!plugin.isReady && !ACTIONS_NO_WAIT.includes(method)) {
+          logger.warn(`Plugin not ready on request "${method}"`, args)
+          resp.send('Plugin not ready', true)
+          return
         }
+        logger.info('Request action:', method, args)
         let res = await plugin.cocAction(method, ...args)
         resp.send(res)
       }
@@ -105,9 +119,8 @@ export default (opts: Attach, requestApi = true): Plugin => {
   nvim.channelId.then(async channelId => {
     clientReady = true
     // Used for test client on vim side
-    if (isTest) nvim.command(`let g:coc_node_channel_id = ${channelId}`, true)
-    let json = require('../package.json')
-    let { major, minor, patch } = semver.parse(json.version)
+    if (isTest) nvim.call('coc#rpc#set_channel', [channelId], true)
+    let { major, minor, patch } = semver.parse(VERSION)
     nvim.setClientInfo('coc', { major, minor, patch }, 'remote', {}, {})
     let entered = await nvim.getVvar('vim_did_enter')
     if (entered && !initialized) {

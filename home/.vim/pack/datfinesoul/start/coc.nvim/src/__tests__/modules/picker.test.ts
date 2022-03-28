@@ -1,8 +1,7 @@
 import { CancellationTokenSource } from 'vscode-languageserver-protocol'
 import { Neovim } from '@chemzqm/neovim'
-import Picker from '../../model/picker'
+import Picker, { QuickPickItem } from '../../model/picker'
 import helper from '../helper'
-import { QuickPickItem } from '../../types'
 
 let nvim: Neovim
 let picker: Picker
@@ -18,6 +17,7 @@ afterAll(async () => {
 
 afterEach(async () => {
   if (picker) picker.dispose()
+  picker = undefined
   await helper.reset()
 })
 
@@ -71,18 +71,20 @@ describe('Picker key mappings', () => {
     expect(res[0].signs[0].name).toBe('CocCurrentLine')
   })
 
-  it('should cancel by <C-c>', async () => {
+  it('should cancel by <esc>', async () => {
+    await helper.createDocument()
     picker = new Picker(nvim, { title: 'title', items })
     let winid = await picker.show({ pickerButtons: true })
     expect(winid).toBeDefined()
     let fn = jest.fn()
     picker.onDidClose(fn)
-    await nvim.input('<C-c>')
-    await helper.wait(50)
-    expect(fn).toBeCalledWith(undefined)
+    await nvim.eval(`feedkeys("\\<Esc>", 'in')`)
+    await helper.wait(200)
+    expect(fn).toBeCalledTimes(1)
   })
 
-  it('should confirm by <cr>', async () => {
+  it('should confirm by <CR>', async () => {
+    await helper.createDocument()
     picker = new Picker(nvim, { title: 'title', items })
     let winid = await picker.show({ pickerButtons: true })
     expect(winid).toBeDefined()
@@ -91,13 +93,16 @@ describe('Picker key mappings', () => {
     await nvim.input('<space>')
     await helper.wait(100)
     await nvim.input('<cr>')
-    await helper.wait(100)
-    expect(fn).toBeCalledWith([0])
+    await nvim.command('redraw')
+    await helper.wait(200)
+    expect(fn).toBeCalledTimes(1)
   })
 
   it('should move cursor by j, k, g & G', async () => {
+    await helper.createDocument()
     picker = new Picker(nvim, { title: 'title', items })
     let winid = await picker.show({ pickerButtons: true })
+    await helper.waitFloat()
     expect(winid).toBeDefined()
     await nvim.input('j')
     await helper.wait(100)
@@ -118,14 +123,35 @@ describe('Picker key mappings', () => {
   })
 
   it('should toggle selection by <space>', async () => {
+    await helper.createDocument()
     picker = new Picker(nvim, { title: 'title', items })
     let winid = await picker.show({ pickerButtons: true })
+    await helper.waitFloat()
     expect(winid).toBeDefined()
     let fn = jest.fn()
     picker.onDidClose(fn)
     await nvim.input('<space>')
-    await helper.wait(50)
+    await helper.wait(300)
+    await nvim.command('redraw')
     let lines = await nvim.call('getbufline', [picker.buffer.id, 1])
     expect(lines[0]).toMatch('[x]')
+  })
+
+  it('should scroll forward & backward', async () => {
+    await helper.createDocument()
+    let items = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'].map(s => {
+      return { label: s }
+    })
+    picker = new Picker(nvim, { title: 'title', items })
+    let winid = await picker.show({ maxHeight: 3 })
+    expect(winid).toBeDefined()
+    await nvim.input('<C-f>')
+    await helper.wait(100)
+    let info = await nvim.call('getwininfo', [winid])
+    expect(info[0]).toBeDefined()
+    await nvim.input('<C-b>')
+    await helper.wait(100)
+    info = await nvim.call('getwininfo', [winid])
+    expect(info[0]).toBeDefined()
   })
 })

@@ -34,7 +34,6 @@ export default class CursorSession {
     private nvim: Neovim,
     private doc: Document,
     private config: Config) {
-    this.doc.forceSync()
     this.textDocument = this.doc.textDocument
     this.buffer.setVar('coc_cursors_activated', 1, true)
     let { cancelKey, nextKey, previousKey } = this.config
@@ -144,8 +143,7 @@ export default class CursorSession {
     }
     nvim.pauseNotification()
     this.doHighlights()
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    nvim.resumeNotification(false, true)
+    void nvim.resumeNotification(true, true)
     return true
   }
 
@@ -156,13 +154,11 @@ export default class CursorSession {
     if (!this.activated) return
     let { nvim } = this
     this.activated = false
-    let { cancelKey, nextKey, previousKey } = this.config
     nvim.pauseNotification()
     this.buffer.clearNamespace('cursors')
     this.buffer.setVar('coc_cursors_activated', 0, true)
     nvim.command('redraw', true)
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    nvim.resumeNotification(false, true)
+    void nvim.resumeNotification(false, true)
     this._onDidCancel.fire()
   }
 

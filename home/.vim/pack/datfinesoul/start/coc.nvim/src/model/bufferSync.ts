@@ -1,10 +1,12 @@
 import { Disposable } from 'vscode-languageserver-protocol'
 import { DidChangeTextDocumentParams, IWorkspace } from '../types'
 import { disposeAll } from '../util'
+import events from '../events'
 import Document from './document'
 
 export interface SyncItem extends Disposable {
   onChange?(e: DidChangeTextDocumentParams): void
+  onTextChange?(): void
 }
 
 /**
@@ -13,7 +15,7 @@ export interface SyncItem extends Disposable {
 export default class BufferSync<T extends SyncItem> {
   private disposables: Disposable[] = []
   private itemsMap: Map<number, { uri: string, item: T }> = new Map()
-  constructor(private _create: (doc: Document) => T | undefined, private workspace: IWorkspace) {
+  constructor(private _create: (doc: Document) => T | undefined, workspace: IWorkspace) {
     let { disposables } = this
     for (let doc of workspace.documents) {
       this.create(doc)
@@ -23,11 +25,22 @@ export default class BufferSync<T extends SyncItem> {
       if (doc) this.create(doc)
     }, null, disposables)
     workspace.onDidChangeTextDocument(e => {
-      this.onChange(e)
+      process.nextTick(() => {
+        if (!workspace.getDocument(e.bufnr)) return
+        this.onChange(e)
+      })
     }, null, disposables)
     workspace.onDidCloseTextDocument(e => {
       this.delete(e.bufnr)
     }, null, disposables)
+    const onTextChange = (bufnr: number) => {
+      let o = this.itemsMap.get(bufnr)
+      if (o && typeof o.item.onTextChange == 'function') {
+        o.item.onTextChange()
+      }
+    }
+    events.on('TextChanged', onTextChange, null, this.disposables)
+    events.on('TextChangedI', onTextChange, null, this.disposables)
   }
 
   public get items(): Iterable<T> {
@@ -45,7 +58,7 @@ export default class BufferSync<T extends SyncItem> {
   }
 
   private create(doc: Document): void {
-    if (!doc || doc.isCommandLine || !doc.attached) return
+    if (!doc) return
     let o = this.itemsMap.get(doc.bufnr)
     if (o) o.item.dispose()
     let item = this._create(doc)
@@ -62,8 +75,8 @@ export default class BufferSync<T extends SyncItem> {
   private delete(bufnr: number): void {
     let o = this.itemsMap.get(bufnr)
     if (o) {
-      this.itemsMap.delete(bufnr)
       o.item.dispose()
+      this.itemsMap.delete(bufnr)
     }
   }
 
@@ -79,6 +92,7 @@ export default class BufferSync<T extends SyncItem> {
     for (let o of this.itemsMap.values()) {
       o.item.dispose()
     }
+    this._create = undefined
     this.itemsMap.clear()
   }
 }

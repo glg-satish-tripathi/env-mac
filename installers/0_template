@@ -1,0 +1,12 @@
+#!/usr/bin/env /home/phadviger/env-ubuntu/env-ubuntu-core
+# NOTE: OSX requires shebang to be binary file not script, this is the workaround
+# shellcheck disable=SC1090
+. "${SCRIPT_DIR}/core.source"
+
+if [[ "$(uname -s)" == "Darwin" ]]; then
+	>&2 echo 'No Darwin Install'
+else
+	>&2 echo 'No Linux Install'
+fi
+
+# vim: set ft=bash :

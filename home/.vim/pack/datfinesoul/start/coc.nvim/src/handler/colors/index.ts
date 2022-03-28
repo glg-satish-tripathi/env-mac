@@ -1,57 +1,61 @@
 import { Neovim } from '@chemzqm/neovim'
 import { CancellationTokenSource, ColorInformation, Disposable, Position } from 'vscode-languageserver-protocol'
+import commandManager from '../../commands'
 import extensions from '../../extensions'
 import languages from '../../languages'
+import BufferSync from '../../model/bufferSync'
+import { ConfigurationChangeEvent, HandlerDelegate } from '../../types'
 import { disposeAll } from '../../util'
+import { toHexString } from '../../util/color'
 import window from '../../window'
 import workspace from '../../workspace'
-import { toHexString } from '../helper'
-import ColorBuffer from './colorBuffer'
-import BufferSync from '../../model/bufferSync'
-const logger = require('../../util/logger')('colors')
+import ColorBuffer, { ColorConfig } from './colorBuffer'
+const logger = require('../../util/logger')('colors-index')
 
 export default class Colors {
-  private _enabled = true
+  private config: ColorConfig
   private disposables: Disposable[] = []
   private highlighters: BufferSync<ColorBuffer>
 
-  constructor(private nvim: Neovim) {
-    let config = workspace.getConfiguration('coc.preferences')
-    this._enabled = config.get<boolean>('colorSupport', true)
-    if (workspace.isVim && !workspace.env.textprop) {
-      this._enabled = false
-    }
+  constructor(private nvim: Neovim, private handler: HandlerDelegate) {
+    this.setConfiguration()
     let usedColors: Set<string> = new Set()
     this.highlighters = workspace.registerBufferSync(doc => {
-      let buf = new ColorBuffer(this.nvim, doc.bufnr, this._enabled, usedColors)
-      buf.highlight()
-      return buf
+      return new ColorBuffer(this.nvim, doc.bufnr, this.config, usedColors)
     })
     extensions.onDidActiveExtension(() => {
       this.highlightAll()
     }, null, this.disposables)
-    workspace.onDidChangeConfiguration(async e => {
-      if (workspace.isVim && !workspace.env.textprop) return
-      if (e.affectsConfiguration('coc.preferences.colorSupport')) {
-        let config = workspace.getConfiguration('coc.preferences')
-        let enabled = config.get<boolean>('colorSupport', true)
-        if (enabled != this._enabled) {
-          this._enabled = enabled
-          for (let buf of this.highlighters.items) {
-            buf.setState(enabled)
-          }
-        }
-      }
-    }, null, this.disposables)
+    workspace.onDidChangeConfiguration(this.setConfiguration, this, this.disposables)
+    this.disposables.push(commandManager.registerCommand('editor.action.pickColor', () => {
+      return this.pickColor()
+    }))
+    commandManager.titles.set('editor.action.pickColor', 'pick color from system color picker when possible.')
+    this.disposables.push(commandManager.registerCommand('editor.action.colorPresentation', () => {
+      return this.pickPresentation()
+    }))
+    commandManager.titles.set('editor.action.colorPresentation', 'change color presentation.')
+  }
+
+  private setConfiguration(e?: ConfigurationChangeEvent): void {
+    if (!e || e.affectsConfiguration('colors')) {
+      let c = workspace.getConfiguration('colors')
+      this.config = Object.assign(this.config || {}, {
+        filetypes: c.get<string[]>('filetypes', []),
+        highlightPriority: c.get<number>('highlightPriority', 1000)
+      })
+    }
   }
 
   public async pickPresentation(): Promise<void> {
-    let info = await this.currentColorInfomation()
+    let { doc } = await this.handler.getCurrentState()
+    this.handler.checkProvier('documentColor', doc.textDocument)
+    let info = await this.getColorInformation(doc.bufnr)
     if (!info) return window.showMessage('Color not found at current position', 'warning')
     let document = await workspace.document
     let tokenSource = new CancellationTokenSource()
     let presentations = await languages.provideColorPresentations(info, document.textDocument, tokenSource.token)
-    if (!presentations || presentations.length == 0) return
+    if (!presentations?.length) return
     let res = await window.showMenuPicker(presentations.map(o => o.label), 'choose color:')
     if (res == -1) return
     let presentation = presentations[res]
@@ -64,19 +68,14 @@ export default class Colors {
   }
 
   public async pickColor(): Promise<void> {
-    let info = await this.currentColorInfomation()
+    let { doc } = await this.handler.getCurrentState()
+    this.handler.checkProvier('documentColor', doc.textDocument)
+    let info = await this.getColorInformation(doc.bufnr)
     if (!info) return window.showMessage('Color not found at current position', 'warning')
     let { color } = info
     let colorArr = [(color.red * 255).toFixed(0), (color.green * 255).toFixed(0), (color.blue * 255).toFixed(0)]
     let res = await this.nvim.call('coc#util#pick_color', [colorArr])
-    if (res === false) {
-      // cancel
-      return
-    }
-    if (!res || res.length != 3) {
-      window.showMessage('Failed to get color', 'warning')
-      return
-    }
+    if (!res) return
     let hex = toHexString({
       red: (res[0] / 65535),
       green: (res[1] / 65535),
@@ -90,14 +89,14 @@ export default class Colors {
     }])
   }
 
-  public get enabled(): boolean {
-    return this._enabled
+  public isEnabled(bufnr: number): boolean {
+    let highlighter = this.highlighters.getItem(bufnr)
+    return highlighter != null && highlighter.enabled === true
   }
 
   public clearHighlight(bufnr: number): void {
     let highlighter = this.highlighters.getItem(bufnr)
-    if (!highlighter) return
-    highlighter.clearHighlight()
+    if (highlighter) highlighter.clearHighlight()
   }
 
   public hasColor(bufnr: number): boolean {
@@ -106,10 +105,10 @@ export default class Colors {
     return highlighter.hasColor()
   }
 
-  public hasColorAtPostion(bufnr: number, position: Position): boolean {
+  public hasColorAtPosition(bufnr: number, position: Position): boolean {
     let highlighter = this.highlighters.getItem(bufnr)
     if (!highlighter) return false
-    return highlighter.hasColorAtPostion(position)
+    return highlighter.hasColorAtPosition(position)
   }
 
   public highlightAll(): void {
@@ -120,12 +119,10 @@ export default class Colors {
 
   public async doHighlight(bufnr: number): Promise<void> {
     let highlighter = this.highlighters.getItem(bufnr)
-    if (!highlighter) return
-    await highlighter.doHighlight()
+    if (highlighter) await highlighter.doHighlight()
   }
 
-  private async currentColorInfomation(): Promise<ColorInformation | null> {
-    let bufnr = await this.nvim.call('bufnr', '%')
+  public async getColorInformation(bufnr: number): Promise<ColorInformation | null> {
     let highlighter = this.highlighters.getItem(bufnr)
     if (!highlighter) return null
     let position = await window.getCursorPosition()
