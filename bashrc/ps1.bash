@@ -59,11 +59,11 @@ ps1_tf () {
   TF="n/a"
   if which terraform > /dev/null; then
     TEMP="$(terraform version -json)"
-    if [[ "${TEMP}" =~ "^{" ]]; then
-      TF="$(terraform version --json | jq -r .terraform_version)"
+    if [[ "${TEMP}" =~ ^\{ ]]; then
+      TF="$(echo "${TEMP}" | jq -r .terraform_version)"
     else
       # deal with older versions of tf version not having json output
-      TF="$(terraform version | head -n1 | cut -d'v' -f2)"
+      TF="$(echo "${TEMP}" | head -n1 | cut -d'v' -f2)"
     fi
   fi
 
