@@ -7,13 +7,11 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   >&2 echo "missing installer"
 else
   ARCHITECTURE="$(dpkg --print-architecture)"
-  if [[ ! -f "/usr/share/keyrings/typora.gpg" ]]; then
-    curl 'https://typora.io/linux/public-key.asc' \
-      | gpg --dearmor \
-      | sudo tee '/usr/share/keyrings/typora.gpg' > /dev/null
-    <<< "deb [arch=${ARCHITECTURE} signed-by=/usr/share/keyrings/typora.gpg] https://typora.io/linux ./" \
-      sudo tee '/etc/apt/sources.list.d/typora.list' > /dev/null
-  fi
+  curl 'https://typora.io/linux/public-key.asc' \
+    | gpg --dearmor \
+    | sudo tee '/usr/share/keyrings/typora.gpg' > /dev/null
+  <<< "deb [arch=${ARCHITECTURE} signed-by=/usr/share/keyrings/typora.gpg] https://typora.io/linux ./" \
+    sudo tee '/etc/apt/sources.list.d/typora.list' > /dev/null
   sudo apt-get --yes update
   sudo apt-get --yes install typora
 fi
