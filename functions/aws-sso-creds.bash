@@ -1,12 +1,12 @@
-aws-creds() {
+aws-sso-creds() {
   local account_id role_name access_token region
   account_id="$(aws configure get sso_account_id --profile ${AWS_PROFILE})"
   role_name="$(aws configure get sso_role_name --profile ${AWS_PROFILE})"
   region="$(aws configure get region --profile ${AWS_PROFILE})"
   access_token="$( \
-    find ~/.aws/sso/cache -type f ! -name "botocore*.json" -exec stat -c '%X %n' {} \; \
+    \ls -c "${HOME}/.aws/sso/cache/" | grep -v botocore \
     | sort -nr | cut -d' ' -f2 | head -n1 \
-    | xargs jq -r .accessToken \
+    | xargs -I{} jq -r .accessToken ${HOME}/.aws/sso/cache/{}
   )"
   aws sso get-role-credentials \
     --account-id "${account_id}" \
