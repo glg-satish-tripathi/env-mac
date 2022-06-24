@@ -3,7 +3,7 @@
 # shellcheck disable=SC1090
 . "${SCRIPT_DIR}/core.source"
 
-VERSION="${1:-v2.3.0}"
+VERSION="${1:-v2.5.1}"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
 	>&2 echo 'No Darwin Install'
