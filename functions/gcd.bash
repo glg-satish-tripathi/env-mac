@@ -24,8 +24,8 @@ _gcd_completions()
     local search="$(find "${COMP_WORDS[1]%/*}" -maxdepth 1 -mindepth 1 -type d -not -name ".*" -name "${COMP_WORDS[1]##*/}*" 2> /dev/null)"
     suggestions=($(compgen -W "${search}"))
   fi
-  local debug_tty="/dev/pts/11" # use 'tty' to find number
-  echo "${#COMP_WORDS[@]}:'${COMP_WORDS[1]}' s:'${suggestions[*]}' -'${COMP_WORDS[1]%/*}'" &> ${debug_tty}
+  #local debug_tty="/dev/pts/11" # use 'tty' to find number
+  #echo "${#COMP_WORDS[@]}:'${COMP_WORDS[1]}' s:'${suggestions[*]}' -'${COMP_WORDS[1]%/*}'" &> ${debug_tty}
   COMPREPLY=("${suggestions[@]}")
 }
 
