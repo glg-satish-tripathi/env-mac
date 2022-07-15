@@ -22,6 +22,7 @@ let s:zig_syntax_keywords = {
     \ ,             "f16"
     \ ,             "f32"
     \ ,             "f64"
+    \ ,             "f80"
     \ ,             "f128"
     \ ,             "void"
     \ ,             "type"
@@ -47,7 +48,7 @@ let s:zig_syntax_keywords = {
     \ ,             "c_longlong"
     \ ,             "c_ulonglong"
     \ ,             "c_longdouble"
-    \ ,             "c_void"]
+    \ ,             "anyopaque"]
     \ , 'zigConstant': ["undefined"
     \ ,                 "unreachable"]
     \ , 'zigConditional': ["if"
@@ -94,8 +95,7 @@ let s:zig_syntax_keywords = {
     \ ,                "callconv"
     \ ,                "noalias"]
     \ , 'zigBuiltinFn': ["align"
-    \ ,                  "@add"
-    \ ,                  "@WithOverflow"
+    \ ,                  "@addWithOverflow"
     \ ,                  "@as"
     \ ,                  "@atomicLoad"
     \ ,                  "@atomicStore"
@@ -107,7 +107,6 @@ let s:zig_syntax_keywords = {
     \ ,                  "@cImport"
     \ ,                  "@cInclude"
     \ ,                  "@cUndef"
-    \ ,                  "@canImplicitCast"
     \ ,                  "@clz"
     \ ,                  "@cmpxchgWeak"
     \ ,                  "@cmpxchgStrong"
@@ -120,6 +119,7 @@ let s:zig_syntax_keywords = {
     \ ,                  "@divTrunc"
     \ ,                  "@embedFile"
     \ ,                  "@export"
+    \ ,                  "@extern"
     \ ,                  "@tagName"
     \ ,                  "@TagType"
     \ ,                  "@errorName"
@@ -134,16 +134,21 @@ let s:zig_syntax_keywords = {
     \ ,                  "@newStackCall"
     \ ,                  "@asyncCall"
     \ ,                  "@intToPtr"
+    \ ,                  "@maximum"
+    \ ,                  "@minimum"
     \ ,                  "@memcpy"
     \ ,                  "@memset"
     \ ,                  "@mod"
+    \ ,                  "@mulAdd"
     \ ,                  "@mulWithOverflow"
     \ ,                  "@splat"
     \ ,                  "@src"
     \ ,                  "@bitOffsetOf"
     \ ,                  "@byteOffsetOf"
+    \ ,                  "@offsetOf"
     \ ,                  "@OpaqueType"
     \ ,                  "@panic"
+    \ ,                  "@prefetch"
     \ ,                  "@ptrCast"
     \ ,                  "@ptrToInt"
     \ ,                  "@rem"
@@ -152,11 +157,10 @@ let s:zig_syntax_keywords = {
     \ ,                  "@Type"
     \ ,                  "@shuffle"
     \ ,                  "@reduce"
+    \ ,                  "@select"
     \ ,                  "@setRuntimeSafety"
     \ ,                  "@setEvalBranchQuota"
     \ ,                  "@setFloatMode"
-    \ ,                  "@setGlobalLinkage"
-    \ ,                  "@setGlobalSection"
     \ ,                  "@shlExact"
     \ ,                  "@This"
     \ ,                  "@hasDecl"
@@ -179,8 +183,6 @@ let s:zig_syntax_keywords = {
     \ ,                  "@typeName"
     \ ,                  "@TypeOf"
     \ ,                  "@atomicRmw"
-    \ ,                  "@bytesToSlice"
-    \ ,                  "@sliceToBytes"
     \ ,                  "@intToError"
     \ ,                  "@errorToInt"
     \ ,                  "@intToEnum"
@@ -193,6 +195,7 @@ let s:zig_syntax_keywords = {
     \ ,                  "@Vector"
     \ ,                  "@sin"
     \ ,                  "@cos"
+    \ ,                  "@tan"
     \ ,                  "@exp"
     \ ,                  "@exp2"
     \ ,                  "@log"
@@ -202,6 +205,8 @@ let s:zig_syntax_keywords = {
     \ ,                  "@floor"
     \ ,                  "@ceil"
     \ ,                  "@trunc"
+    \ ,                  "@wasmMemorySize"
+    \ ,                  "@wasmMemoryGrow"
     \ ,                  "@round"]
     \ }
 
@@ -256,11 +261,11 @@ highlight default link zigCommentLineDoc Comment
 highlight default link zigDummyVariable Comment
 highlight default link zigTodo Todo
 highlight default link zigString String
-highlight default link zigStringDelimiter Delimiter
+highlight default link zigStringDelimiter String
 highlight default link zigMultilineString String
 highlight default link zigMultilineStringContent String
 highlight default link zigMultilineStringPrefix String
-highlight default link zigMultilineStringDelimiter Ignore
+highlight default link zigMultilineStringDelimiter Delimiter
 highlight default link zigCharacterInvalid Error
 highlight default link zigCharacterInvalidUnicode zigCharacterInvalid
 highlight default link zigCharacter Character
@@ -277,7 +282,7 @@ highlight default link zigStructure Structure
 highlight default link zigExecution Special
 highlight default link zigMacro Macro
 highlight default link zigConditional Conditional
-highlight default link zigComparatorWord Operator
+highlight default link zigComparatorWord Keyword
 highlight default link zigRepeat Repeat
 highlight default link zigSpecial Special
 highlight default link zigVarDecl Function

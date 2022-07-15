@@ -80,7 +80,7 @@ syn region elixirStruct matchgroup=elixirStructDelimiter start="%\(\w\+{\)\@=" e
 
 syn region elixirMap matchgroup=elixirMapDelimiter start="%{" end="}" contains=ALLBUT,@elixirNotTop fold
 
-syn region elixirString  matchgroup=elixirStringDelimiter start=+\z('\)+   end=+\z1+ skip=+\\\\\|\\\z1+  contains=@Spell,@elixirStringContained
+syn region elixirCharList  matchgroup=elixirCharListDelimiter start=+\z('\)+   end=+\z1+ skip=+\\\\\|\\\z1+  contains=@Spell,@elixirStringContained
 syn region elixirString  matchgroup=elixirStringDelimiter start=+\z("\)+   end=+\z1+ skip=+\\\\\|\\\z1+  contains=@Spell,@elixirStringContained
 syn region elixirString  matchgroup=elixirStringDelimiter start=+\z('''\)+ end=+^\s*\z1+ contains=@Spell,@elixirStringContained
 syn region elixirString  matchgroup=elixirStringDelimiter start=+\z("""\)+ end=+^\s*\z1+ contains=@Spell,@elixirStringContained
@@ -92,7 +92,7 @@ syn match elixirString             "\(\w\)\@<!?\%(\\\(x\d{1,2}\|\h{1,2}\h\@!\>\|
 syn region elixirBlock              matchgroup=elixirBlockDefinition start="\<do\>:\@!" end="\<end\>" contains=ALLBUT,@elixirNotTop fold
 syn region elixirAnonymousFunction  matchgroup=elixirBlockDefinition start="\<fn\>"     end="\<end\>" contains=ALLBUT,@elixirNotTop fold
 
-syn region elixirArguments start="(" end=")" contained contains=elixirOperator,elixirAtom,elixirPseudoVariable,elixirAlias,elixirBoolean,elixirVariable,elixirUnusedVariable,elixirNumber,elixirDocString,elixirAtomInterpolated,elixirRegex,elixirString,elixirStringDelimiter,elixirRegexDelimiter,elixirInterpolationDelimiter,elixirSigil,elixirAnonymousFunction,elixirComment
+syn region elixirArguments start="(" end=")" contained contains=elixirOperator,elixirAtom,elixirPseudoVariable,elixirAlias,elixirBoolean,elixirVariable,elixirUnusedVariable,elixirNumber,elixirDocString,elixirAtomInterpolated,elixirRegex,elixirString,elixirStringDelimiter,elixirRegexDelimiter,elixirInterpolationDelimiter,elixirSigil,elixirAnonymousFunction,elixirComment,elixirCharList,elixirCharListDelimiter
 
 syn match elixirDelimEscape "\\[(<{\[)>}\]/\"'|]" transparent display contained contains=NONE
 
@@ -119,6 +119,7 @@ syntax include @HTML syntax/html.vim
 unlet b:current_syntax
 syntax region elixirLiveViewSigil matchgroup=elixirSigilDelimiter keepend start=+\~L\z("""\)+ end=+^\s*\z1+ skip=+\\"+ contains=@HTML fold
 syntax region elixirSurfaceSigil matchgroup=elixirSigilDelimiter keepend start=+\~H\z("""\)+ end=+^\s*\z1+ skip=+\\"+ contains=@HTML fold
+syntax region elixirSurfaceSigil matchgroup=elixirSigilDelimiter keepend start=+\~F\z("""\)+ end=+^\s*\z1+ skip=+\\"+ contains=@HTML fold
 syntax region elixirPhoenixESigil matchgroup=elixirSigilDelimiter keepend start=+\~E\z("""\)+ end=+^\s*\z1+ skip=+\\"+ contains=@HTML fold
 syntax region elixirPhoenixeSigil matchgroup=elixirSigilDelimiter keepend start=+\~e\z("""\)+ end=+^\s*\z1+ skip=+\\"+ contains=@HTML fold
 
@@ -148,6 +149,7 @@ syn region elixirDocString matchgroup=elixirDocSigilDelimiter  start=+\%(@\w*doc
 " Defines
 syn match elixirDefine              '\<def\>\(:\)\@!'             nextgroup=elixirFunctionDeclaration        skipwhite skipnl
 syn match elixirPrivateDefine       '\<defp\>\(:\)\@!'            nextgroup=elixirPrivateFunctionDeclaration skipwhite skipnl
+syn match elixirNumericalDefine     '\<defn\>\(:\)\@!'            nextgroup=elixirFunctionDeclaration        skipwhite skipnl
 syn match elixirGuard               '\<defguard\>\(:\)\@!'        nextgroup=elixirFunctionDeclaration        skipwhite skipnl
 syn match elixirPrivateGuard        '\<defguardp\>\(:\)\@!'       nextgroup=elixirPrivateFunctionDeclaration skipwhite skipnl
 syn match elixirModuleDefine        '\<defmodule\>\(:\)\@!'       nextgroup=elixirModuleDeclaration          skipwhite skipnl
@@ -190,6 +192,7 @@ syn sync minlines=2000
 hi def link elixirBlockDefinition            Define
 hi def link elixirDefine                     Define
 hi def link elixirPrivateDefine              Define
+hi def link elixirNumericalDefine            Define
 hi def link elixirGuard                      Define
 hi def link elixirPrivateGuard               Define
 hi def link elixirModuleDefine               Define
@@ -234,10 +237,12 @@ hi def link elixirRegexCharClass             elixirSpecial
 hi def link elixirRegexQuantifier            elixirSpecial
 hi def link elixirSpecial                    Special
 hi def link elixirString                     String
+hi def link elixirCharList                   String
 hi def link elixirSigil                      String
 hi def link elixirDocStringDelimiter         elixirStringDelimiter
 hi def link elixirDocSigilDelimiter          elixirSigilDelimiter
 hi def link elixirStringDelimiter            Delimiter
+hi def link elixirCharListDelimiter          Delimiter
 hi def link elixirRegexDelimiter             Delimiter
 hi def link elixirInterpolationDelimiter     Delimiter
 hi def link elixirSigilDelimiter             Delimiter
