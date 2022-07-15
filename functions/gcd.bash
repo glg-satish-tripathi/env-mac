@@ -4,7 +4,11 @@ gcd () {
 	# if not in a git repo, exit
 	git rev-parse --show-toplevel &> /dev/null || return
 
-	cd "$(git rev-parse --show-toplevel)/${TARGET}" && pwd
+  if [[ "${TARGET}" == /* ]]; then
+    cd "${TARGET}" && pwd
+  else
+    cd "$(git rev-parse --show-toplevel)/${TARGET}" && pwd
+  fi
 }
 
 _gcd_completions()
@@ -17,10 +21,11 @@ _gcd_completions()
   if [ -z "${COMP_WORDS[1]}" ]; then
     suggestions=($(compgen -W "${revparse}"))
   else
-    suggestions=($(compgen -W "$(find "${COMP_WORDS[1]}" -maxdepth 1 -mindepth 1 -type d -not -name ".*")"))
+    local search="$(find "${COMP_WORDS[1]%/*}" -maxdepth 1 -mindepth 1 -type d -not -name ".*" -name "${COMP_WORDS[1]##*/}*" 2> /dev/null)"
+    suggestions=($(compgen -W "${search}"))
   fi
-  #local debug_tty="/dev/pts/11" # use 'tty' to find number
-  #echo "${#COMP_WORDS[@]}:'${COMP_WORDS[1]}' s:'${suggestions[*]}'" &> ${debug_tty}
+  local debug_tty="/dev/pts/11" # use 'tty' to find number
+  echo "${#COMP_WORDS[@]}:'${COMP_WORDS[1]}' s:'${suggestions[*]}' -'${COMP_WORDS[1]%/*}'" &> ${debug_tty}
   COMPREPLY=("${suggestions[@]}")
 }
 
