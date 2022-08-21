@@ -41,8 +41,6 @@ function cleanup {
 }
 trap cleanup EXIT
 
-set -x
-
 #cp hidden files
 #shopt -s dotglob nullglob
 #files=(*)

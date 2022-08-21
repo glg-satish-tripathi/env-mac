@@ -57,7 +57,6 @@ which bat > /dev/null || alias bat='batcat'
 alias fix_fn="echo 2 | sudo tee /sys/module/hid_apple/parameters/fnmode"
 alias code="vscodium"
 alias ssh="kitty +kitten ssh"
-alias tf=terraform
 alias purge="printf '\x1b[2J\x1b[3J\x1b[1;1H'"
 #history + percol - date
 alias hp="history | percol --match-method regex | awk '{\$1=\$2=\$3=\"\"; print \$0;}'"
