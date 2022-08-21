@@ -1,4 +1,4 @@
-#!/usr/bin/env /home/phadviger/env-ubuntu/env-ubuntu-core
+#!/usr/bin/env /usr/local/bin/env-ubuntu-core
 # NOTE: OSX requires shebang to be binary file not script, this is the workaround
 # shellcheck disable=SC1090
 . "${SCRIPT_DIR}/core.source"
@@ -7,6 +7,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   >&2 echo "missing installer"
 else
   ARCHITECTURE="$(dpkg --print-architecture)"
+  sudo id
   curl 'https://typora.io/linux/public-key.asc' \
     | gpg --dearmor \
     | sudo tee '/usr/share/keyrings/typora.gpg' > /dev/null
