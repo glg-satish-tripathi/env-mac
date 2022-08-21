@@ -1,6 +1,7 @@
-#!/usr/bin/env bash
+#!/usr/bin/env /usr/local/bin/env-ubuntu-core
+# NOTE: OSX requires shebang to be binary file not script, this is the workaround
 # shellcheck disable=SC1090
-source "$(dirname "$(readlink -e -- "$0")")/core.source"
+. "${SCRIPT_DIR}/core.source"
 
 VERSION="${1:-1.0.1}"
 TARGET="/usr/local/bin/act"
@@ -13,6 +14,6 @@ else
   >&2 echo ":: unsupported kernel"
 fi
 
-wget -q 'https://github.com/nektos/act/releases/download/v0.2.25/act_Linux_x86_64.tar.gz'
+wget -q 'https://github.com/nektos/act/releases/download/v0.2.29/act_Linux_x86_64.tar.gz'
 tar xzf act_Linux_x86_64.tar.gz
 sudo mv "act" "${TARGET}"

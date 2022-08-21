@@ -44,6 +44,7 @@ else
   newgrp docker
 fi
 # if ~/.docker was created as root, remove it or fix permissions
+# XXX: seems to hang here, maybe the new group is not picked up by the existing shell?
 docker run hello-world
 
 # vim: set ft=bash :

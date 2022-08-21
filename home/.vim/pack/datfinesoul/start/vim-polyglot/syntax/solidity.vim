@@ -59,8 +59,8 @@ syntax match  solNumber           '\v\c<%(\d+%(e[+-]=\d+)=|0b[01]+|0o\o+|0x\x+)>
 syntax match  solNumber           '\v\c<%(\d+.\d+|\d+.|.\d+)%(e[+-]=\d+)=>'
 
 " Strings
-syntax region solString           start=/\v"/ skip=/\v\\./ end=/\v"/
-syntax region solString           start="\v'" skip="\v\\." end="\v'"
+syntax region solString           start=/\v"/ skip=/\v\\./ end=/\v"/ contains=@Spell
+syntax region solString           start="\v'" skip="\v\\." end="\v'" contains=@Spell
 
 hi def link   solNumber           Number
 hi def link   solString           String
@@ -120,14 +120,14 @@ syn region    solFuncModParens    contained contains=solString,solFuncCall,solCo
       \ end=')'
 syn keyword   solFuncReturn       contained nextgroup=solFuncRetParens skipwhite skipempty returns
 syn region    solFuncRetParens    contains=solValueType,solFuncStorageType nextgroup=solFuncBody skipempty skipwhite
-      \ start='(' 
-      \ end=')' 
+      \ start='('
+      \ end=')'
 syn region    solFuncBody         contained contains=solDestructure,solComment,solAssemblyBlock,solEmitEvent,solTypeCast,solMethod,solValueType,solConstant,solKeyword,solRepeat,solLabel,solException,solStructure,solFuncStorageType,solOperator,solNumber,solString,solFuncCall,solIf,solElse,solLoop skipempty skipwhite
-      \ start='{' 
-      \ end='}' 
+      \ start='{'
+      \ end='}'
 syn match     solFuncCall         contained skipempty skipwhite nextgroup=solCallOptions,solFuncCallParens
       \ '\v%(%(<if>|<uint>|<int>|<ufixed>|<bytes>|<address>|<string>|<bool>)\s*)@<!<[a-zA-Z_][0-9a-zA-Z_]*\s*%((\{(\n|.|\s)*\})?\s*(\((\n|.|\s)*\)))@='
-syn region    solFuncCallParens   contained transparent contains=solString,solFuncCall,solConstant,solNumber,solMethod,solTypeCast,solComma,solOperator
+syn region    solFuncCallParens   contained transparent contains=solComment,solString,solFuncCall,solConstant,solNumber,solMethod,solTypeCast,solComma,solOperator
       \ start='('
       \ end=')'
 
@@ -185,6 +185,12 @@ hi def link   solEventName        Function
 hi def link   solEventParamMod    Keyword
 hi def link   solEmitEvent        Special
 
+" Errors
+syn match     solError            /\<error\>/ nextgroup=solErrorName,solFuncParams skipwhite
+syn match     solErrorName        /\<[a-zA-Z_][0-9a-zA-Z_]*/ nextgroup=solFuncParam contained skipwhite
+
+hi def link   solErrorName        Function
+
 " Constants
 syn keyword   solConstant         true false wei szabo finney ether seconds minutes hours days weeks years now super
 syn keyword   solConstant         block msg now tx this abi
@@ -241,7 +247,7 @@ syn keyword   solMethod           delete new var return import
 syn region    solMethodParens     start='(' end=')' contains=solString,solConstant,solNumber,solFuncCall,solTypeCast,solMethod,solComma,solOperator contained transparent
 syn keyword   solMethod           nextgroup=solMethodParens skipwhite skipempty
       \ blockhash require revert assert keccak256 sha256
-      \ ripemd160 ecrecover addmod mullmod selfdestruct
+      \ ripemd160 ecrecover addmod mulmod selfdestruct
 
 hi def link   solMethod           Special
 
@@ -304,8 +310,8 @@ hi def link   solLoop             Keyword
 
 " Comments
 syn keyword   solTodo             TODO FIXME XXX TBD contained
-syn region    solComment          start=/\/\// end=/$/ contains=solTodo
-syn region    solComment          start=/\/\*/ end=/\*\// contains=solTodo
+syn region    solComment          start=/\/\// end=/$/ contains=solTodo,@Spell
+syn region    solComment          start=/\/\*/ end=/\*\// contains=solTodo,@Spell
 
 hi def link   solTodo             Todo
 hi def link   solComment          Comment
@@ -318,8 +324,8 @@ syn match     solNatspecTag       /@notice\>/ contained
 syn match     solNatspecTag       /@param\>/ contained
 syn match     solNatspecTag       /@return\>/ contained
 syn match     solNatspecParam     /\(@param\s*\)\@<=\<[a-zA-Z_][0-9a-zA-Z_]*/
-syn region    solNatspecBlock     start=/\/\/\// end=/$/ contains=solTodo,solNatspecTag,solNatspecParam
-syn region    solNatspecBlock     start=/\/\*\{2}/ end=/\*\// contains=solTodo,solNatspecTag,solNatspecParam
+syn region    solNatspecBlock     start=/\/\/\// end=/$/ contains=solTodo,solNatspecTag,solNatspecParam,@Spell
+syn region    solNatspecBlock     start=/\/\*\{2}/ end=/\*\// contains=solTodo,solNatspecTag,solNatspecParam,@Spell
 
 hi def link   solNatspecTag       SpecialComment
 hi def link   solNatspecBlock     Comment
