@@ -21,7 +21,11 @@ _gcd_completions()
   if [ -z "${COMP_WORDS[1]}" ]; then
     suggestions=($(compgen -W "${revparse}"))
   else
-    local search="$(find "${COMP_WORDS[1]%/*}" -maxdepth 1 -mindepth 1 -type d -not -name ".*" -name "${COMP_WORDS[1]##*/}*" 2> /dev/null)"
+    #local search="$(find "${COMP_WORDS[1]%/*}" -maxdepth 1 -mindepth 1 -type d -not -name ".*" -name "${COMP_WORDS[1]##*/}*" 2> /dev/null)"
+    local search="$(find "${COMP_WORDS[1]%/*}" -maxdepth 1 -mindepth 1 -type d \
+      -not -name "." -not -name ".." -not -name ".git" -name "${COMP_WORDS[1]##*/}*" \
+      2> /dev/null \
+      )"
     suggestions=($(compgen -W "${search}"))
   fi
   #local debug_tty="/dev/pts/11" # use 'tty' to find number

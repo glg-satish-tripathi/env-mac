@@ -107,3 +107,5 @@
 [commit]
 	template = /home/datfinesoul/.gitmessage
 	gpgsign = true
+;[url "https://git@"]
+;  insteadOf = git://
