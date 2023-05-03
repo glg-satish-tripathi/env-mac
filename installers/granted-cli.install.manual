@@ -1,0 +1,40 @@
+#!/usr/bin/env /usr/local/bin/env-ubuntu-core
+# NOTE: OSX requires shebang to be binary file not script, this is the workaround
+# shellcheck disable=SC1090
+. "${SCRIPT_DIR}/core.source"
+
+VERSION="${1:-0.9.1}"
+TOOLSET="granted"
+
+KERNEL_NAME="$(uname -s)" # Darwin/Linux
+MACHINE="$(uname -m)"
+if [[ "${MACHINE}" == "x86_64" ]]; then
+  ARCHITECTURE="amd64"
+else
+  ARCHITECTURE="arm64"
+fi
+
+ZIP_FILE="granted_${VERSION}_linux_${MACHINE}.tar.gz"
+URL="https://releases.commonfate.io/granted/v${VERSION}/${ZIP_FILE}"
+
+TARGET_DIR="${HOME}/.local/${TOOLSET}/${VERSION}"
+BIN_DIR="${HOME}/.local/bin"
+
+mkdir -p "${TARGET_DIR}"
+mkdir -p "${BIN_DIR}"
+
+if [[ "${KERNEL_NAME}" == "Darwin" ]]; then
+  #ln -sf "${TARGET_DIR}/${VERSIONED_EXE}" "${BIN_DIR}/${EXECUTABLE}"
+  false
+else
+  curl -OL "${URL}"
+  tar -zxvf "./${ZIP_FILE}"
+  mv assume "${TARGET_DIR}/assume"
+  mv assumego "${TARGET_DIR}/assumego"
+  mv granted "${TARGET_DIR}/granted"
+  ln --symbolic --force "${TARGET_DIR}/assume" "${BIN_DIR}/assume"
+  ln --symbolic --force "${TARGET_DIR}/assumego" "${BIN_DIR}/assumego"
+  ln --symbolic --force "${TARGET_DIR}/granted" "${BIN_DIR}/granted"
+fi
+
+# vim: set ft=bash :

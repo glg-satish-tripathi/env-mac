@@ -24,12 +24,8 @@
 " POSSIBILITY OF SUCH DAMAGE.
 "
 
-if v:version < 700
-    finish
-endif
-
-" check whether this script is already loaded
-if exists("g:loaded_EditorConfig")
+" check for Vim versions and duplicate script loading.
+if v:version < 700 || exists("g:loaded_EditorConfig")
     finish
 endif
 let g:loaded_EditorConfig = 1
@@ -62,6 +58,18 @@ endif
 
 if !exists('g:EditorConfig_disable_rules')
     let g:EditorConfig_disable_rules = []
+endif
+
+if !exists('g:EditorConfig_enable_for_new_buf')
+    let g:EditorConfig_enable_for_new_buf = 0
+endif
+
+if !exists('g:EditorConfig_softtabstop_space')
+    let g:EditorConfig_softtabstop_space = 1
+endif
+
+if !exists('g:EditorConfig_softtabstop_tab')
+    let g:EditorConfig_softtabstop_tab = 1
 endif
 
 " Copy some of the globals into script variables --- changes to these
@@ -197,10 +205,15 @@ function! s:GetFilenames(path, filename) " {{{1
 endfunction " }}}1
 
 function! s:UseConfigFiles() abort " Apply config to the current buffer {{{1
+    let b:editorconfig_tried = 1
     let l:buffer_name = expand('%:p')
-    " ignore buffers without a name
+
     if empty(l:buffer_name)
-        return
+        if g:EditorConfig_enable_for_new_buf
+            let l:buffer_name = getcwd() . "/."
+        else
+            return
+        endif
     endif
 
     if exists("b:EditorConfig_disable") && b:EditorConfig_disable
@@ -242,9 +255,12 @@ function! s:UseConfigFiles() abort " Apply config to the current buffer {{{1
     endfor
 
     if s:editorconfig_core_mode ==? 'vim_core'
-        call s:UseConfigFiles_VimCore()
+        if s:UseConfigFiles_VimCore(l:buffer_name) == 0
+            let b:editorconfig_applied = 1
+        endif
     elseif s:editorconfig_core_mode ==? 'external_command'
-        call s:UseConfigFiles_ExternalCommand()
+        call s:UseConfigFiles_ExternalCommand(l:buffer_name)
+        let b:editorconfig_applied = 1
     else
         echohl Error |
                     \ echo "Unknown EditorConfig Core: " .
@@ -261,6 +277,7 @@ function! s:EditorConfigEnable(should_enable)
         autocmd!
         if a:should_enable
             autocmd BufNewFile,BufReadPost,BufFilePost * call s:UseConfigFiles()
+            autocmd VimEnter,BufNew * call s:UseConfigFiles()
         endif
     augroup END
 endfunction
@@ -277,21 +294,15 @@ command! EditorConfigReload call s:UseConfigFiles() " Reload EditorConfig files
 " On startup, enable the autocommands
 call s:EditorConfigEnable(1)
 
-" Always set the filetype for .editorconfig files
-augroup editorconfig_dosini
-    autocmd!
-    autocmd BufNewFile,BufRead .editorconfig set filetype=dosini
-augroup END
-
 " }}}1
 
 " UseConfigFiles function for different modes {{{1
 
-function! s:UseConfigFiles_VimCore()
+function! s:UseConfigFiles_VimCore(target)
 " Use the vimscript EditorConfig core
     try
         let l:config = editorconfig_core#handler#get_configurations(
-            \ { 'target': expand('%:p') } )
+            \ { 'target': a:target } )
         call s:ApplyConfig(l:config)
         return 0    " success
     catch
@@ -299,17 +310,17 @@ function! s:UseConfigFiles_VimCore()
     endtry
 endfunction
 
-function! s:UseConfigFiles_ExternalCommand()
+function! s:UseConfigFiles_ExternalCommand(target)
 " Use external EditorConfig core (e.g., the C core)
 
     call s:DisableShellSlash()
     let l:exec_path = shellescape(s:editorconfig_exec_path)
     call s:ResetShellSlash()
 
-    call s:SpawnExternalParser(l:exec_path)
+    call s:SpawnExternalParser(l:exec_path, a:target)
 endfunction
 
-function! s:SpawnExternalParser(cmd) " {{{2
+function! s:SpawnExternalParser(cmd, target) " {{{2
 " Spawn external EditorConfig. Used by s:UseConfigFiles_ExternalCommand()
 
     let l:cmd = a:cmd
@@ -321,7 +332,7 @@ function! s:SpawnExternalParser(cmd) " {{{2
     let l:config = {}
 
     call s:DisableShellSlash()
-    let l:cmd = l:cmd . ' ' . shellescape(expand('%:p'))
+    let l:cmd = l:cmd . ' ' . shellescape(a:target)
     call s:ResetShellSlash()
 
     let l:parsing_result = split(system(l:cmd), '\v[\r\n]+')
@@ -368,7 +379,7 @@ endfunction " }}}2
 
 function! s:ApplyConfig(config) abort " Set the buffer options {{{1
     " Only process normal buffers (do not treat help files as '.txt' files)
-    if !empty(&buftype)
+    if index(['', 'acwrite'], &buftype) == -1
         return
     endif
 
@@ -394,12 +405,18 @@ function! s:ApplyConfig(config) abort " Set the buffer options {{{1
         " value
         if a:config["indent_size"] == "tab"
             let &l:shiftwidth = &l:tabstop
-            let &l:softtabstop = &l:shiftwidth
+            if type(g:EditorConfig_softtabstop_tab) != type([])
+                let &l:softtabstop = g:EditorConfig_softtabstop_tab > 0 ?
+                            \ &l:shiftwidth : g:EditorConfig_softtabstop_tab
+            endif
         else
             let l:indent_size = str2nr(a:config["indent_size"])
             if l:indent_size > 0
                 let &l:shiftwidth = l:indent_size
-                let &l:softtabstop = &l:shiftwidth
+                if type(g:EditorConfig_softtabstop_space) != type([])
+                    let &l:softtabstop = g:EditorConfig_softtabstop_space > 0 ?
+                            \ &l:shiftwidth : g:EditorConfig_softtabstop_space
+                endif
             endif
         endif
 
@@ -473,7 +490,7 @@ function! s:ApplyConfig(config) abort " Set the buffer options {{{1
         if exists('+colorcolumn')
             if l:max_line_length > 0
                 if g:EditorConfig_max_line_indicator == 'line'
-                    let &l:colorcolumn = l:max_line_length + 1
+                    setlocal colorcolumn+=+1
                 elseif g:EditorConfig_max_line_indicator == 'fill' &&
                             \ l:max_line_length < &l:columns
                     " Fill only if the columns of screen is large enough
@@ -488,6 +505,15 @@ function! s:ApplyConfig(config) abort " Set the buffer options {{{1
                     endfor
                     call matchadd('ColorColumn',
                         \ '\%' . (l:max_line_length + 1) . 'v.', 100)
+                elseif g:EditorConfig_max_line_indicator == 'fillexceeding'
+                    let &l:colorcolumn = ''
+                    for l:match in getmatches()
+                        if get(l:match, 'group', '') == 'ColorColumn'
+                            call matchdelete(get(l:match, 'id'))
+                        endif
+                    endfor
+                    call matchadd('ColorColumn',
+                        \ '\%'. (l:max_line_length + 1) . 'v.\+', -1)
                 endif
             endif
         endif
@@ -503,7 +529,7 @@ function! s:TrimTrailingWhitespace() " {{{1
         " don't lose user position when trimming trailing whitespace
         let s:view = winsaveview()
         try
-            silent! keeppatterns %s/\s\+$//e
+            silent! keeppatterns keepjumps %s/\s\+$//e
         finally
             call winrestview(s:view)
         endtry
