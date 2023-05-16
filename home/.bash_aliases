@@ -64,4 +64,4 @@ alias bu='brew update; brew upgrade; brew cleanup; brew doctor && brew cask upgr
 alias bat &> /dev/null && alias cat='bat -pp'
 alias sso='export AWS_PROFILE=$(sed -n "s/\[profile \(.*\)\]/\1/gp" ~/.aws/config | fzf)'
 alias assume="source assume"
-alias iambic="docker run -it -u $(id -u):$(id -g) -v ${HOME}/.aws:/app/.aws:ro -e AWS_CONFIG_FILE=/app/.aws/config -e AWS_SHARED_CREDENTIALS_FILE=/app/.aws/credentials -e "AWS_PROFILE" -e HOME=/app -v /home/datfinesoul/github/undefined-io/iambic-templates:/templates:Z public.ecr.aws/iambic/iambic:latest"
+alias iambic="docker run -it --rm -u $(id -u):$(id -g) -v ${HOME}/.aws:/app/.aws:ro -e AWS_CONFIG_FILE=/app/.aws/config -e AWS_SHARED_CREDENTIALS_FILE=/app/.aws/credentials -e "AWS_PROFILE" -e HOME=/app -v ${HOME}/github/undefined-io/iambic-templates:/templates:Z public.ecr.aws/iambic/iambic:latest"
