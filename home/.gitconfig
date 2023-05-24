@@ -59,6 +59,7 @@
 	rebase-preserve = rebase --committer-date-is-author-date
 	own = "!git lg --name-only --author=\"$(git config user.name)\""
 	sl = shortlog --summary --numbered --email --all
+	de = "!sh -c 'branch=\"$1\"; shift; paths=(); for arg do paths+=(\":(exclude)$arg\"); done; git diff \"$branch\" -- . \"${paths[@]}\"' -"
 
 [color]
 	status = auto

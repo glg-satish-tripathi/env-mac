@@ -267,3 +267,5 @@ let g:vim_markdown_new_list_item_indent = 2
 
 let g:fzf_preview_window = ['up:50%:hidden', 'ctrl-/']
 
+set modeline
+set modelines=4
