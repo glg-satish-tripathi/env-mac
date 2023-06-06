@@ -3,8 +3,9 @@
 # shellcheck disable=SC1090
 . "${SCRIPT_DIR}/core.source"
 
-VERSION="${1:-0.12.0}"
-TOOLSET="granted"
+REPO="common-fate/granted"
+
+# Only change the above
 
 KERNEL_NAME="$(uname -s)" # Darwin/Linux
 MACHINE="$(uname -m)"
@@ -14,8 +15,21 @@ else
   ARCHITECTURE="arm64"
 fi
 
-ZIP_FILE="granted_${VERSION}_linux_${MACHINE}.tar.gz"
+# use the passed in version first
+VERSION="${1:-}"
+if [[ -z "${VERSION}" ]]; then
+  # if no version was passed in, look at github
+  read -r VERSION URL <<< "$(gh api "/repos/${REPO}/releases/latest" \
+    | jq -r '.tag_name' \
+  )"
+fi
+VERSION="${VERSION#*v}"
+
+TOOLSET="granted"
+
+ZIP_FILE="granted_${VERSION}_${KERNEL_NAME,,}_${MACHINE}.tar.gz"
 URL="https://releases.commonfate.io/granted/v${VERSION}/${ZIP_FILE}"
+>&2 echo ":: fetching ${URL}"
 
 TARGET_DIR="${HOME}/.local/${TOOLSET}/${VERSION}"
 BIN_DIR="${HOME}/.local/bin"
