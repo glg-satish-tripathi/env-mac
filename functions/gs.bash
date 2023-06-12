@@ -4,9 +4,13 @@ gs (){
 	if [[ -z "${tld}" ]]; then
 		return
 	fi
-	if [[ -z "${command}" || ! -e "${tld}/_dev/gs-targets/${command}" ]]; then
-		find "${tld}"/_dev/gs-targets -type l -printf '%f\n'
+	if [[ ! -e "${tld}/_dev/gs-targets" ]]; then
+		>&2 echo ":: missing dir ${tld}/_dev/gs-targets"
 		return
 	fi
-	"${tld}/dev/gs-targets/${command}"
+	if [[ -z "${command}" || ! -e "${tld}/_dev/gs-targets/${command}" ]]; then
+		>&2 find "${tld}"/_dev/gs-targets -type l -printf '%f\n'
+		return
+	fi
+	"${tld}/_dev/gs-targets/${command}"
 }

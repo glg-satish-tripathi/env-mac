@@ -267,5 +267,11 @@ let g:vim_markdown_new_list_item_indent = 2
 
 let g:fzf_preview_window = ['up:50%:hidden', 'ctrl-/']
 
-set modeline
-set modelines=4
+"nnoremap <leader>dl :setlocal formatoptions-=c<Bar>setlocal formatoptions-=r<Bar>setlocal formatoptions-=o<Bar>:noautocmd execute 'g/^\s*$/d' \| execute 'g/^#\s*\n.*[^#]/normal! O' \| execute 'g/^#.*\n[^#]\s*/normal! o' \| silent! noh<CR>
+"nnoremap <leader>dl :noautocmd execute 'g/^\s*$/d'<Bar>silent! noh<CR>
+
+function! DeleteBlankLines() range
+  silent '<,'>g/^\s*$/d_
+endfunction
+vnoremap <leader>dl :call DeleteBlankLines()<CR>:silent! noh<CR>
+nnoremap <leader>dl :g/^\s*$/d_<Bar>:silent! noh<CR>
