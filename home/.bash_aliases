@@ -64,4 +64,27 @@ alias bu='brew update; brew upgrade; brew cleanup; brew doctor && brew cask upgr
 alias bat &> /dev/null && alias cat='bat -pp'
 alias sso='export AWS_PROFILE=$(sed -n "s/\[profile \(.*\)\]/\1/gp" ~/.aws/config | fzf)'
 alias assume="source assume"
-alias iambic="docker run -it --rm -u $(id -u):$(id -g) -v ${HOME}/.aws:/app/.aws:ro -e AWS_CONFIG_FILE=/app/.aws/config -e AWS_SHARED_CREDENTIALS_FILE=/app/.aws/credentials -e "AWS_PROFILE" -e HOME=/app -v ${HOME}/github/undefined-io/iambic-templates:/templates:Z public.ecr.aws/iambic/iambic:latest"
+alias iambic="docker run -it --rm -u $(id -u):$(id -g) \
+	-e AWS_CONFIG_FILE=/app/.aws/config \
+	-e AWS_SHARED_CREDENTIALS_FILE=/app/.aws/credentials \
+	-e "AWS_PROFILE" \
+	-e "AWS_ACCESS_KEY_ID" \
+	-e "AWS_SECRET_ACCESS_KEY" \
+	-e "AWS_SESSION_TOKEN" \
+	-e HOME=/app \
+	-v ${HOME}/.aws:/app/.aws:ro \
+	-v ${HOME}/github/undefined-io/iambic-templates:/templates:Z \
+	-v /tmp/iambic:/output \
+	public.ecr.aws/iambic/iambic:latest"
+alias iambic-beta="docker run -it --rm -u $(id -u):$(id -g) \
+	-e AWS_CONFIG_FILE=/app/.aws/config \
+	-e AWS_SHARED_CREDENTIALS_FILE=/app/.aws/credentials \
+	-e "AWS_PROFILE" \
+	-e "AWS_ACCESS_KEY_ID" \
+	-e "AWS_SECRET_ACCESS_KEY" \
+	-e "AWS_SESSION_TOKEN" \
+	-e HOME=/app \
+	-v ${HOME}/.aws:/app/.aws:ro \
+	-v ${HOME}/github/undefined-io/iambic-templates:/templates:Z \
+	-v /tmp/iambic:/output \
+	datfinesoul/iambic:test"
